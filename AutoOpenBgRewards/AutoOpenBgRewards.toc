@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: |cff00bbeeAutoOpenBgRewards|r by |cFFC41F3BMori|r
+## Title-ruRU: |cff00bbeeАвто-опен наград с бг|r от |cFFC41F3BMori|r
+## Notes: Codework by some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul, |r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
+## SavedVariables: AutoOpenBgRewards_Settings
+
+AutoOpenBgRewards.lua
