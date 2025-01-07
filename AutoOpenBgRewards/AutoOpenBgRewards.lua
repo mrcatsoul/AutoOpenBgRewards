@@ -6,19 +6,30 @@ SetCVar("autoLootDefault","1")
 local f=CreateFrame("frame")
 f:RegisterEvent("UI_ERROR_MESSAGE")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
---f:RegisterEvent("BAG_UPDATE")
+f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+f:RegisterEvent("PLAYER_LEAVING_WORLD")
 f:SetScript("OnEvent", function(self, event, ...) return self[event](self, ...) end)
-local scanLaunched,bagsAreFull
-local lockedBagSlot,settings={},{}
+local scanLaunched,bagsAreFull,InstanceType,curZone
+local lockedBagSlot,openTryCount,settings={},{},{}
+local lastBagUpdTime=0
 
-local function _print(msg,msg2)
+local function _print(msg,msg2,msg3)
   if settings["show_addon_log_in_chat"] then
-    print("|cff3399ff[AutoOpen]:|r "..msg, msg2 and "("..msg2..")" or "")
+    print("|cff3399ff[AutoOpen]:|r "..msg, msg2 and "("..msg2..")" or "", msg3 and "("..msg3..")" or "")
+  end
+end
+
+function f:PLAYER_LEAVING_WORLD()
+  --print("PLAYER_LEAVING_WORLD")
+  if f:IsEventRegistered("BAG_UPDATE") then
+    f:UnregisterEvent("BAG_UPDATE")
   end
 end
 
 function f:BAG_UPDATE(...)
   if not settings["auto_open_when_received"] then return end
+  if lastBagUpdTime+0.1>GetTime() then return end
+  lastBagUpdTime=GetTime()
   f:CheckAndOpenItems("BAG_UPDATE")
 end
 
@@ -39,6 +50,8 @@ end
 
 function f:PLAYER_ENTERING_WORLD()
   --print("PLAYER_ENTERING_WORLD")
+  InstanceType = select(2,IsInInstance())
+  curZone=GetZoneText()
   if not settings["auto_open_when_received"] then return end
   local t=0
   CreateFrame("frame"):SetScript("OnUpdate", function(self, elapsed)
@@ -46,6 +59,7 @@ function f:PLAYER_ENTERING_WORLD()
     if t>1 then
       if not f:IsEventRegistered("BAG_UPDATE") then
         f:RegisterEvent("BAG_UPDATE")
+        --print("RegisterEvent BAG_UPDATE")
       end
       f:CheckAndOpenItems("PLAYER_ENTERING_WORLD")
       self:SetScript("OnUpdate", nil)
@@ -55,6 +69,11 @@ function f:PLAYER_ENTERING_WORLD()
   end)
 end
 
+function f:ZONE_CHANGED_NEW_AREA()
+  InstanceType = select(2,IsInInstance())
+  curZone=GetZoneText()
+end
+
 function f:UI_ERROR_MESSAGE(msg)
   if msg==ERR_INV_FULL and f:HasScript("OnUpdate") then 
     _print("|cffff0000сумки фул|r")
@@ -62,49 +81,55 @@ function f:UI_ERROR_MESSAGE(msg)
   end
 end
 
-function f:inCrossZone()
-  local isInstance, InstanceType = IsInInstance()
-  local curZone=GetZoneText()
+function inCrossZone()
   if InstanceType=="pvp" or InstanceType=="arena" or curZone=="Кратер Азшары" or curZone=="Ульдуар" or curZone=="Azshara Crater" or curZone=="Ulduar" then
     return true
   end
-  return nil
+  return false
 end
 
-local function CanOpen()
-  return not 
-  (
-  scanLaunched
-  or bagsAreFull  
-  or f:inCrossZone()  
-  or MerchantFrame:IsVisible()  
-  or (settings["stop_if_less_then_X_free_bag_slots"] and getNumFreeBagSlots() < MIN_FREE_SLOTS_FOR_AUTO_OPEN)  
-  or (settings["stop_if_more_then_X_money"] and GetMoney()>MAX_MONEY_FOR_AUTO_OPEN)
-  )
+function CannotOpen()
+  -- InstanceType = select(2,IsInInstance())
+  -- curZone=GetZoneText()
+  if 
+    scanLaunched
+    or not UnitIsConnected("player")
+    or bagsAreFull  
+    or curZone==nil
+    or curZone==""
+    or inCrossZone()
+    or MerchantFrame:IsVisible()  
+    or (settings["stop_if_less_then_X_free_bag_slots"] and getNumFreeBagSlots() < MIN_FREE_SLOTS_FOR_AUTO_OPEN)  
+    or (settings["stop_if_more_then_X_money"] and GetMoney() > MAX_MONEY_FOR_AUTO_OPEN) 
+  then
+    return true
+  end
+  return false
 end
 
 function f:CheckAndOpenItems(reason)
-  if not CanOpen() then 
-    --_print("|cffff0000not CanOpen()|r",reason)
+  if CannotOpen() then 
+    --_print("|cffff0000CannotOpen()|r",reason)
     return 
   end
 
-  _print("|cff00ff00запуск скана итемов...|r",reason)
+  --_print("|cff00ff00запуск скана итемов...|r", reason..", "..curZone..", "..tostring(inCrossZone())..", "..select(2,IsInInstance()).."")
+  _print("|cff00ff00запуск скана итемов...|r", reason)
   scanLaunched=true
   local t=0
   
   f:SetScript("OnUpdate",function(_,elapsed)
     if not scanLaunched then
-      _print("|cffff0000скан итемов отмененен изза: открытия окна вендора/нахождения в крос зоне/фул сумок/итем заблокирован(серый) множество раз/автолут забагался/кап голды включен в опциях/не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." слотов в опциях|r")
+      _print("|cffff0000скан итемов отмененен изза: открытия окна вендора/нахождения в крос зоне/фул сумок/итем заблокирован/не открывается/автолут забагался/кап голды включен в опциях/не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." слотов в опциях|r")
       f:SetScript("OnUpdate",nil)
-      lockedBagSlot,bagsAreFull={},nil
+      lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
       return 
     end
     
     t=t+elapsed
     
     --_print(t)
-    if t<(0.02+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then 
+    if t<(0.05+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then 
       return 
     end
     --if t<0.01 or LootFrame:IsVisible() then return end
@@ -117,7 +142,7 @@ function f:CheckAndOpenItems(reason)
           return 
         end
         
-        if f:inCrossZone() then 
+        if inCrossZone() then 
           _print("|cffff0000скан итемов прерван изза нахождения в крос зоне|r")
           scanLaunched=nil
           return 
@@ -143,7 +168,11 @@ function f:CheckAndOpenItems(reason)
         
         local itemID = GetContainerItemID(bag,slot)
 
-        if itemID and (itemID==38165 or itemID==38702 or id==10594) then -- 38165 - ларец, 38702 - красный, 10594 - сундук наград
+        -- 38165 - ларец
+        -- 38702 - красный
+        -- 10594 - сундук наград
+        -- 44816 - скари лутбокс
+        if itemID and (itemID==38165 or itemID==38702 or itemID==10594 or itemID==44816) then 
           --local itemLink = GetContainerItemLink(bag,slot)
           --local itemName = GetItemInfo(itemID)
           local _, _, locked, _, _, lootable, itemLink = GetContainerItemInfo(bag,slot)
@@ -151,9 +180,9 @@ function f:CheckAndOpenItems(reason)
           if lootable and itemLink then
             if locked then
               lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
-              _print("|cffff0000итем заблокирован(серый) "..lockedBagSlot[bag.."-"..slot].." раз(а):|r",itemLink)
-              if lockedBagSlot[bag.."-"..slot] > 50 then
-                _print("|cffff0000скан итемов прерван, итем заблокирован(серый) "..lockedBagSlot[bag.."-"..slot].." раз(а):|r",itemLink)
+              _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+              if lockedBagSlot[bag.."-"..slot] > 10 then
+                _print("|cffff0000скан итемов прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
                 scanLaunched=nil
               end
               return
@@ -165,9 +194,16 @@ function f:CheckAndOpenItems(reason)
               -- return
             -- end
             
-            _print("|cff00ff00открываем итем:|r",itemLink)
+            openTryCount[bag.."-"..slot] = openTryCount[bag.."-"..slot] and openTryCount[bag.."-"..slot]+1 or 1
+            _print("|cffddff55открываем итем:|r", itemLink, openTryCount[bag.."-"..slot]>1 and "x"..openTryCount[bag.."-"..slot].."")
             UseContainerItem(bag, slot)
             t=0
+            
+            if openTryCount[bag.."-"..slot] > 10 then
+              _print("|cffff0000скан итемов прерван, итем не открывается (x"..openTryCount[bag.."-"..slot].."):|r",itemLink)
+              scanLaunched=nil
+            end
+            
             return
           end
         end
