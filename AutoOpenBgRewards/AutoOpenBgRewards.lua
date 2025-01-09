@@ -156,42 +156,44 @@ function f:CheckAndOpenItems(reason)
     --if t<0.01 or LootFrame:IsVisible() then return end
     
     -- сначала скан по очистке, удалять вроде как можно на кроссе
-    for bag = 0,4 do
-      for slot = 1,GetContainerNumSlots(bag) do
-        local itemID = GetContainerItemID(bag,slot)
+    if reason and reason~="/opentest" then
+      for bag = 0,4 do
+        for slot = 1,GetContainerNumSlots(bag) do
+          local itemID = GetContainerItemID(bag,slot)
 
-        if itemID then 
-          --local itemLink = GetContainerItemLink(bag,slot)
-          --local itemName = GetItemInfo(itemID)
-          local _, _, locked, _, _, _, itemLink = GetContainerItemInfo(bag,slot)
-          
-          if itemLink then
-            if locked then
-              lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
-              _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
-              if lockedBagSlot[bag.."-"..slot] > 20 then
-                _print("|cffff0000скан итемов по очистке треша прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
-                scanLaunched=nil
-                return
-              end
-              --return
-            else
-              if (itemID==43489 and settings["auto_delete_mohawk_grenade"]) or
-                 (itemID==33081 and settings["auto_delete_voodoo_skull"]) or
-                 (itemID==38577 and settings["auto_delete_party_grenade"]) or
-                 (itemID==40081 and settings["auto_delete_pot_of_nightmares"]) or
-                 (itemID==40087 and settings["auto_delete_pot_powerful_rejuv"]) or
-                 (itemID==46378 and settings["auto_delete_flask_of_pure_mojo"]) or
-                 (itemID==46779 and settings["auto_delete_path_of_cenarius"]) or
-                 (itemID==38233 and settings["auto_delete_path_of_illidan"]) 
-              then 
-                _print("|cffff0000удаляем хлам:|r",itemLink)
-                ClearCursor()
-                PickupContainerItem(bag, slot)
-                DeleteCursorItem()
-                lockedBagSlot[bag.."-"..slot]=nil
-                t=0
-                return
+          if itemID then 
+            --local itemLink = GetContainerItemLink(bag,slot)
+            --local itemName = GetItemInfo(itemID)
+            local _, _, locked, _, _, _, itemLink = GetContainerItemInfo(bag,slot)
+            
+            if itemLink then
+              if locked then
+                lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
+                _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+                if lockedBagSlot[bag.."-"..slot] > 20 then
+                  _print("|cffff0000скан итемов по очистке треша прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+                  scanLaunched=nil
+                  return
+                end
+                --return
+              else
+                if (itemID==43489 and settings["auto_delete_mohawk_grenade"]) or
+                   (itemID==33081 and settings["auto_delete_voodoo_skull"]) or
+                   (itemID==38577 and settings["auto_delete_party_grenade"]) or
+                   (itemID==40081 and settings["auto_delete_pot_of_nightmares"]) or
+                   (itemID==40087 and settings["auto_delete_pot_powerful_rejuv"]) or
+                   (itemID==46378 and settings["auto_delete_flask_of_pure_mojo"]) or
+                   (itemID==46779 and settings["auto_delete_path_of_cenarius"]) or
+                   (itemID==38233 and settings["auto_delete_path_of_illidan"]) 
+                then 
+                  _print("|cffff0000удаляем хлам:|r",itemLink)
+                  ClearCursor()
+                  PickupContainerItem(bag, slot)
+                  DeleteCursorItem()
+                  lockedBagSlot[bag.."-"..slot]=nil
+                  t=0
+                  return
+                end
               end
             end
           end
