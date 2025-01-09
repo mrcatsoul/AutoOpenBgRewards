@@ -13,6 +13,23 @@ local scanLaunched,bagsAreFull,InstanceType,curZone
 local lockedBagSlot,openTryCount,settings={},{},{}
 local lastBagUpdTime=0
 
+local containerIDs =
+{
+  38165, -- ларец
+  38702, -- красный
+  10594, -- сундук наград
+  44816, -- скари лутбокс
+}
+
+local function contains(table, element)
+  for _, value in pairs(table) do
+    if (value == element) then
+      return true
+    end
+  end
+  return false
+end
+
 local function _print(msg,msg2,msg3)
   if settings["show_addon_log_in_chat"] then
     print("|cff3399ff[AutoOpen]:|r "..msg, msg2 and "("..msg2..")" or "", msg3 and "("..msg3..")" or "")
@@ -52,6 +69,7 @@ function f:PLAYER_ENTERING_WORLD()
   --print("PLAYER_ENTERING_WORLD")
   InstanceType = select(2,IsInInstance())
   curZone=GetZoneText()
+  lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
   if not settings["auto_open_when_received"] then return end
   local t=0
   CreateFrame("frame"):SetScript("OnUpdate", function(self, elapsed)
@@ -72,6 +90,7 @@ end
 function f:ZONE_CHANGED_NEW_AREA()
   InstanceType = select(2,IsInInstance())
   curZone=GetZoneText()
+  lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
 end
 
 function f:UI_ERROR_MESSAGE(msg)
@@ -81,14 +100,14 @@ function f:UI_ERROR_MESSAGE(msg)
   end
 end
 
-function inCrossZone()
+local function inCrossZone()
   if InstanceType=="pvp" or InstanceType=="arena" or curZone=="Кратер Азшары" or curZone=="Ульдуар" or curZone=="Azshara Crater" or curZone=="Ulduar" then
     return true
   end
   return false
 end
 
-function CannotOpen()
+local function CannotOpen()
   -- InstanceType = select(2,IsInInstance())
   -- curZone=GetZoneText()
   if 
@@ -97,7 +116,9 @@ function CannotOpen()
     or bagsAreFull  
     or curZone==nil
     or curZone==""
-    or inCrossZone()
+    or InstanceType=="pvp" 
+    or InstanceType=="arena"
+    --or inCrossZone()
     or MerchantFrame:IsVisible()  
     or (settings["stop_if_less_then_X_free_bag_slots"] and getNumFreeBagSlots() < MIN_FREE_SLOTS_FOR_AUTO_OPEN)  
     or (settings["stop_if_more_then_X_money"] and GetMoney() > MAX_MONEY_FOR_AUTO_OPEN) 
@@ -120,7 +141,7 @@ function f:CheckAndOpenItems(reason)
   
   f:SetScript("OnUpdate",function(_,elapsed)
     if not scanLaunched then
-      _print("|cffff0000скан итемов отмененен изза: открытия окна вендора/нахождения в крос зоне/фул сумок/итем заблокирован/не открывается/автолут забагался/кап голды включен в опциях/не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." слотов в опциях|r")
+      _print("|cffff0000скан итемов отмененен изза: открытия окна вендора/нахождения на кросе/фул сумок/итем заблокирован/не открывается/автолут забагался/кап голды включен в опциях/не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." слотов в сумках в опциях|r")
       f:SetScript("OnUpdate",nil)
       lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
       return 
@@ -129,82 +150,124 @@ function f:CheckAndOpenItems(reason)
     t=t+elapsed
     
     --_print(t)
-    if t<(0.05+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then 
+    if t<(0.05+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт
       return 
     end
     --if t<0.01 or LootFrame:IsVisible() then return end
     
+    -- сначала скан по очистке, удалять вроде как можно на кроссе
     for bag = 0,4 do
       for slot = 1,GetContainerNumSlots(bag) do
-        if MerchantFrame:IsVisible() then
-          _print("|cffff0000скан итемов прерван изза открытия окна вендора|r")
-          scanLaunched=nil
-          return 
-        end
-        
-        if inCrossZone() then 
-          _print("|cffff0000скан итемов прерван изза нахождения в крос зоне|r")
-          scanLaunched=nil
-          return 
-        end
-        
-        if bagsAreFull then 
-          _print("|cffff0000скан итемов прерван изза фул сумок|r")
-          scanLaunched=nil
-          return 
-        end
-        
-        if (settings["stop_if_less_then_X_free_bag_slots"] and getNumFreeBagSlots() < MIN_FREE_SLOTS_FOR_AUTO_OPEN) then
-          _print("|cffff0000скан итемов прерван изза опции: Не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках|r")
-          scanLaunched=nil
-          return 
-        end
-        
-        if (settings["stop_if_more_then_X_money"] and GetMoney()>MAX_MONEY_FOR_AUTO_OPEN) then
-          _print("|cffff0000скан итемов прерван, кап голды + открывался ларец|r")
-          scanLaunched=nil
-          return
-        end
-        
         local itemID = GetContainerItemID(bag,slot)
 
-        -- 38165 - ларец
-        -- 38702 - красный
-        -- 10594 - сундук наград
-        -- 44816 - скари лутбокс
-        if itemID and (itemID==38165 or itemID==38702 or itemID==10594 or itemID==44816) then 
+        if itemID then 
+          --local itemLink = GetContainerItemLink(bag,slot)
+          --local itemName = GetItemInfo(itemID)
+          local _, _, locked, _, _, _, itemLink = GetContainerItemInfo(bag,slot)
+          
+          if itemLink then
+            if locked then
+              lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
+              _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+              if lockedBagSlot[bag.."-"..slot] > 20 then
+                _print("|cffff0000скан итемов по очистке треша прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+                scanLaunched=nil
+                return
+              end
+              --return
+            else
+              if (itemID==43489 and settings["auto_delete_mohawk_grenade"]) or
+                 (itemID==33081 and settings["auto_delete_voodoo_skull"]) or
+                 (itemID==38577 and settings["auto_delete_party_grenade"]) or
+                 (itemID==40081 and settings["auto_delete_pot_of_nightmares"]) or
+                 (itemID==40087 and settings["auto_delete_pot_powerful_rejuv"]) or
+                 (itemID==46378 and settings["auto_delete_flask_of_pure_mojo"]) or
+                 (itemID==46779 and settings["auto_delete_path_of_cenarius"]) or
+                 (itemID==38233 and settings["auto_delete_path_of_illidan"]) 
+              then 
+                _print("|cffff0000удаляем хлам:|r",itemLink)
+                ClearCursor()
+                PickupContainerItem(bag, slot)
+                DeleteCursorItem()
+                lockedBagSlot[bag.."-"..slot]=nil
+                t=0
+                return
+              end
+            end
+          end
+        end
+      end
+    end
+    
+    -- потом по открытию. тут условия по жестче
+    for bag = 0,4 do
+      for slot = 1,GetContainerNumSlots(bag) do
+        local itemID = GetContainerItemID(bag,slot)
+
+        if itemID then 
           --local itemLink = GetContainerItemLink(bag,slot)
           --local itemName = GetItemInfo(itemID)
           local _, _, locked, _, _, lootable, itemLink = GetContainerItemInfo(bag,slot)
           
-          if lootable and itemLink then
+          if itemLink then
             if locked then
               lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
               _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
               if lockedBagSlot[bag.."-"..slot] > 10 then
-                _print("|cffff0000скан итемов прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+                _print("|cffff0000скан итемов по опену прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
                 scanLaunched=nil
+                return
               end
-              return
+              --return
+            else
+              if lootable and contains(containerIDs, itemID) then
+                if MerchantFrame:IsVisible() then
+                  _print("|cffff0000опен итемов прерван изза открытия окна вендора|r")
+                  scanLaunched=nil
+                  return 
+                end
+                
+                if inCrossZone() then 
+                  _print("|cffff0000опен итемов прерван изза нахождения на кросе|r")
+                  scanLaunched=nil
+                  return 
+                end
+                
+                if bagsAreFull then 
+                  _print("|cffff0000опен итемов прерван изза фул сумок|r")
+                  scanLaunched=nil
+                  return 
+                end
+                
+                if (settings["stop_if_less_then_X_free_bag_slots"] and getNumFreeBagSlots() < MIN_FREE_SLOTS_FOR_AUTO_OPEN) then
+                  _print("|cffff0000опен итемов прерван изза опции: не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках|r")
+                  scanLaunched=nil
+                  return 
+                end
+                
+                if (settings["stop_if_more_then_X_money"] and GetMoney()>MAX_MONEY_FOR_AUTO_OPEN) then
+                  _print("|cffff0000опен итемов прерван изза опции: не открывать если больше чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках|r")
+                  scanLaunched=nil
+                  return
+                end
+                
+                _print("|cffddff55опеним итем:|r", itemLink, openTryCount[bag.."-"..slot]>1 and "x"..openTryCount[bag.."-"..slot].."")
+                
+                UseContainerItem(bag, slot)
+                
+                lockedBagSlot[bag.."-"..slot]=nil
+                
+                openTryCount[bag.."-"..slot] = openTryCount[bag.."-"..slot] and openTryCount[bag.."-"..slot]+1 or 1
+                
+                if openTryCount[bag.."-"..slot] > 10 then
+                  _print("|cffff0000опен итемов прерван, итем не открывается (x"..openTryCount[bag.."-"..slot].."):|r",itemLink)
+                  scanLaunched=nil
+                end
+                
+                t=0
+                return
+              end
             end
-            
-            -- if (settings["stop_if_more_then_X_money"] and GetMoney()>MAX_MONEY_FOR_AUTO_OPEN) and itemID==38165 then
-              -- _print("|cffff0000скан итемов прерван, кап голды + открывался ларец|r")
-              -- scanLaunched=nil
-              -- return
-            -- end
-            
-            openTryCount[bag.."-"..slot] = openTryCount[bag.."-"..slot] and openTryCount[bag.."-"..slot]+1 or 1
-            _print("|cffddff55открываем итем:|r", itemLink, openTryCount[bag.."-"..slot]>1 and "x"..openTryCount[bag.."-"..slot].."")
-            UseContainerItem(bag, slot)
-            t=0
-            
-            if openTryCount[bag.."-"..slot] > 10 then
-              _print("|cffff0000скан итемов прерван, итем не открывается (x"..openTryCount[bag.."-"..slot].."):|r",itemLink)
-              scanLaunched=nil
-            end
-            
-            return
           end
         end
       end
@@ -239,6 +302,14 @@ settingsFrame:SetScript("onevent", function(_, event, ...)
       settings["show_addon_log_in_chat"]=true
       settings["stop_if_less_then_X_free_bag_slots"]=true
       settings["stop_if_more_then_X_money"]=true
+      settings["auto_delete_mohawk_grenade"]=false
+      settings["auto_delete_voodoo_skull"]=false
+      settings["auto_delete_party_grenade"]=false
+      settings["auto_delete_pot_of_nightmares"]=false
+      settings["auto_delete_pot_powerful_rejuv"]=false
+      settings["auto_delete_flask_of_pure_mojo"]=false
+      settings["auto_delete_path_of_cenarius"]=false
+      settings["auto_delete_path_of_illidan"]=false
     end
     _print(""..GetAddOnMetadata(ADDON_NAME, "Title")..": loaded. |cff33aaff/opentest|r - for use or Interface>AddOns for options.")
   end
@@ -248,72 +319,45 @@ settingsFrame.TitleText = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFo
 settingsFrame.TitleText:SetPoint("TOPLEFT", 16, -16)
 settingsFrame.TitleText:SetText(""..GetAddOnMetadata(ADDON_NAME, "Title")..": Settings")
 
-do
+local options =
+{
+  {"show_addon_log_in_chat","Выводить лог работы скрипта в чат"},
+  {"auto_open_when_received","Открывать все боксы автоматом, при условии, что не на кроссе"},
+  {"stop_if_less_then_X_free_bag_slots","НЕ открывать автоматом если меньше, чем "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках"},
+  {"stop_if_more_then_X_money","НЕ открывать автоматом если больше, чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках"},
+  {"auto_delete_mohawk_grenade","Удалять  |T"..select(10,GetItemInfo(43489))..":15|t "..select(1,GetItemInfo(43489)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_voodoo_skull","Удалять  |T"..select(10,GetItemInfo(33081))..":15|t "..select(1,GetItemInfo(33081)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_party_grenade","Удалять  |T"..select(10,GetItemInfo(38577))..":15|t "..select(1,GetItemInfo(38577)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_pot_of_nightmares","Удалять  |T"..select(10,GetItemInfo(40081))..":15|t "..select(1,GetItemInfo(40081)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_pot_powerful_rejuv","Удалять  |T"..select(10,GetItemInfo(40087))..":15|t "..select(1,GetItemInfo(40087)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_flask_of_pure_mojo","Удалять  |T"..select(10,GetItemInfo(46378))..":15|t "..select(1,GetItemInfo(46378)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_path_of_cenarius","Удалять  |T"..select(10,GetItemInfo(46779))..":15|t "..select(1,GetItemInfo(46779)).." |cffff0000(не протестировано, на свой страх и риск)"},
+  {"auto_delete_path_of_illidan","Удалять  |T"..select(10,GetItemInfo(38233))..":15|t "..select(1,GetItemInfo(38233)).." |cffff0000(не протестировано, на свой страх и риск)"},
+}
+
+local function CreateOptionCheckbox(optionName,optionDescription,num)
   local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
-  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -10)
+  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -10-(num*10))
 
   checkbox.label = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   checkbox.label:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
-  checkbox.label:SetText("Открывать все боксы автоматом (при условии что не на кроссе)")
+  checkbox.label:SetText(optionDescription or "")
 
   checkbox:SetScript("OnClick", function(self)
-    settings["auto_open_when_received"]=self:GetChecked()
+    settings[optionName]=self:GetChecked()
   end)
 
   checkbox:SetScript("onshow", function(self)
-    self:SetChecked(settings["auto_open_when_received"])
+    self:SetChecked(settings[optionName])
   end)
 end
 
 do
-  local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
-  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -30)
-
-  checkbox.label = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  checkbox.label:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
-  checkbox.label:SetText("Выводить лог работы скрипта в чат")
-
-  checkbox:SetScript("OnClick", function(self)
-    settings["show_addon_log_in_chat"]=self:GetChecked()
-  end)
-
-  checkbox:SetScript("onshow", function(self)
-    self:SetChecked(settings["show_addon_log_in_chat"])
-  end)
-end
-
-do
-  local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
-  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -50)
-
-  checkbox.label = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  checkbox.label:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
-  checkbox.label:SetText("Не открывать если меньше чем "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках")
-
-  checkbox:SetScript("OnClick", function(self)
-    settings["stop_if_less_then_X_free_bag_slots"]=self:GetChecked()
-  end)
-
-  checkbox:SetScript("onshow", function(self)
-    self:SetChecked(settings["stop_if_less_then_X_free_bag_slots"])
-  end)
-end
-
-do
-  local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
-  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -70)
-
-  checkbox.label = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  checkbox.label:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
-  checkbox.label:SetText("Не открывать если больше чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках")
-
-  checkbox:SetScript("OnClick", function(self)
-    settings["stop_if_more_then_X_money"]=self:GetChecked()
-  end)
-
-  checkbox:SetScript("onshow", function(self)
-    self:SetChecked(settings["stop_if_more_then_X_money"])
-  end)
+  local num=0
+  for _,v in ipairs(options) do
+    CreateOptionCheckbox(v[1],v[2],num)
+    num=num+2
+  end
 end
 
 -- Регистрация страницы опций
