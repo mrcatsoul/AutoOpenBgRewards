@@ -1,7 +1,8 @@
 ## Interface: 30300
 ## Title: |cff00bbeeAutoOpenBgRewards|r by |cFFC41F3BMori|r
 ## Title-ruRU: |cff00bbeeАвто-опен наград с бг|r от |cFFC41F3BMori|r
-## Notes: Codework by some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul, |r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
+## Notes: Script for auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by: some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
+## Notes-ruRU: Скрипт по авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа на кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
 ## SavedVariables: AutoOpenBgRewards_Settings
 
 AutoOpenBgRewards.lua
