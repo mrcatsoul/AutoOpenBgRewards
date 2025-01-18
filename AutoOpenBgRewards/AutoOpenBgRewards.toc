@@ -6,7 +6,7 @@
 ## Title-ruRU: |cff00bbeeАвто-опен наград с бг|r от |cFFC41F3BMori|r
 ## TitleS-ruRU: |cff3399ffАвто-опен наград с бг|r
 
-## Version: 1.0.0, 16.1.25 23:00
+## Version: 1.0.0, 18.1.25 12:00
 
 ## Notes: Script for auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by: some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
 ## Notes-ruRU: Скрипт по авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа на кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
