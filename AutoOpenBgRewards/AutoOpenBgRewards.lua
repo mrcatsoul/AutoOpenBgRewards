@@ -1,4 +1,4 @@
--- 16.1.25
+-- 17.1.25
 
 local ADDON_NAME = ...
 local LOCALE = GetLocale()
@@ -19,16 +19,21 @@ f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 f:RegisterEvent("PLAYER_LEAVING_WORLD")
 --f:RegisterEvent("PLAYER_LOGIN")
 f:SetScript("OnEvent", function(self, event, ...) return self[event](self, ...) end)
-local scanLaunched,bagsAreFull,InstanceType,curZone
+local _,scanLaunched,bagsAreFull,InstanceType,curZone
 local lockedBagSlot,openTryCount,cfg,trashItemsCount,containerItemsCount={},{},{},{},{}
 local lastBagUpdTime=0
-local _
 local AUCTION_ITEM_SUB_CATEGORY_PET = LOCALE=="ruRU" and "Питомцы" or "Pet"
 local AUCTION_ITEM_SUB_CATEGORY_MOUNT = LOCALE=="ruRU" and "Верховые животные" or "Mount"
-local BUG_CATEGORY13 = BUG_CATEGORY13
+local BUG_CATEGORY13,ITEM_SOULBOUND,ITEM_SPELL_KNOWN = BUG_CATEGORY13,ITEM_SOULBOUND,ITEM_SPELL_KNOWN
 local oldAutoLootState=GetCVar("autoLootDefault")
+local ZONE_ULDUAR = LOCALE=="ruRU" and "Ульдуар" or "Ulduar"
+local ZONE_AZSHARA_CRATER = LOCALE=="ruRU" and "Кратер Азшары" or "Azshara Crater"
 
--- опаснейшие функции которые будут использоваться в коде. надеюсь все проверки правильно сделаю...
+local GetContainerNumFreeSlots,GetItemInfo,GetItemCount = GetContainerNumFreeSlots,GetItemInfo,GetItemCount
+local GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID = GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID
+local GetContainerItemLink = GetContainerItemLink
+
+-- стремные функции, которые будут использоваться в коде. надеюсь все проверки правильно сделаю... 
 local ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem=ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem
 
 -- айди итемов-контейнеров которые будем опенить в авто-моде
@@ -116,7 +121,7 @@ function f:BAG_UPDATE(...)
   lastBagUpdTime=GetTime()
   --print("BAG_UPDATE (+)")
   f:ScanBags("BAG_UPDATE", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
-  f:ScanBags("BAG_UPDATE", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+  --f:ScanBags("BAG_UPDATE", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
 end
 
 local function getNumFreeBagSlots()
@@ -152,7 +157,7 @@ function f:PLAYER_ENTERING_WORLD(byCheckbox)
       --local forceAutoOpen=cfg["auto_open_confirm"]==true and false or 1
       --print(forceAutoDelTrash,forceAutoOpen)
       f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
-      f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+      --f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
       self:SetScript("OnUpdate", nil)
       self=nil
       return
@@ -174,7 +179,7 @@ function f:UI_ERROR_MESSAGE(msg)
 end
 
 local function inCrossZone()
-  if InstanceType=="pvp" or InstanceType=="arena" or curZone=="Кратер Азшары" or curZone=="Ульдуар" or curZone=="Azshara Crater" or curZone=="Ulduar" then
+  if InstanceType=="pvp" or InstanceType=="arena" or curZone==ZONE_ULDUAR or curZone==ZONE_AZSHARA_CRATER then
     return true
   end
   return false
@@ -207,9 +212,9 @@ local function ItemIsAlreadyKnown(bag,slot)
   --f.Tip:Show()
   for i = 1, f.Tip:NumLines() do
     if (_G[f.Tip:GetName().."TextLeft"..i]:GetText() == ITEM_SPELL_KNOWN) then
-      local texture, count, locked, quality, readable, lootable, link = GetContainerItemInfo(bag,slot)
-      --local link = GetContainerItemLink(bag,slot)
-      --local id = GetContainerItemID(bag,slot)
+      --local texture, count, locked, quality, readable, lootable, link = GetContainerItemInfo(bag,slot)
+      local link = GetContainerItemLink(bag,slot)
+      local id = GetContainerItemID(bag,slot)
       --print(_G[ADDON_NAME.."_ItemCheckTooltipTextLeft"..i]:GetTextColor())
       _print("изученная шмотка детектед:",bag,slot,link,id)
       return true
@@ -562,7 +567,7 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
         local popup = StaticPopup_Show(""..ADDON_NAME.."_Confirm_Delete")
         if popup then
           popup.data = "|cff44aaeeВ сумках найден следующий мусор:|r\n\n"..allItemsText.."\n\n|cffff0000УДАЛИМ ЭТОТ ТРЭШ, БРО?|r"
-          print("\n"..popup.data.." "..ChatLink("Удалить трэш (кликабельно)","Confirm_Delete"))
+          _print("\n"..popup.data.." "..ChatLink("Удалить трэш (кликабельно)","Confirm_Delete"))
         end
       end
       
@@ -585,7 +590,7 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
         local popup = StaticPopup_Show(""..ADDON_NAME.."_Confirm_Open")
         if popup then
           popup.data = "|cff44aaeeВ сумках найден следующий контейнер:|r\n\n"..allItemsText.."\n\n|cffff0000Открываем всё?|r"
-          print("\n"..popup.data.." "..ChatLink("Открыть всё (кликабельно)","Confirm_Open"))
+          _print("\n"..popup.data.." "..ChatLink("Открыть всё (кликабельно)","Confirm_Open"))
         end
       end
     end
@@ -810,13 +815,18 @@ StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"] = {
     self:Hide()
 	end,
   OnUpdate = function(self, elapsed)
-    if self.data and self.text:GetText()~=self.data then
-      self.text:SetText(self.data)
-      StaticPopup_Resize(self, ""..ADDON_NAME.."_Confirm_Delete")
-      --_G[self:GetName().."AlertIcon"]:SetSize(20,20)
-    end
     if not CanDelete() then
       self:Hide()
+    else
+      local info = StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"]
+      if info and info.showAlert then
+        _G[self:GetName().."AlertIcon"]:SetTexture("Interface\\AddOns\\"..ADDON_NAME.."\\pomoykawow.tga")
+        _G[self:GetName().."AlertIcon"]:SetSize(28,28)
+      end
+      if self.data and self.text:GetText()~=self.data then
+        self.text:SetText(self.data)
+        StaticPopup_Resize(self, ""..ADDON_NAME.."_Confirm_Delete")
+      end
     end
   end,
 	OnCancel = function(self, data, reason)
@@ -851,13 +861,19 @@ StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Open"] = {
     self:Hide()
 	end,
   OnUpdate = function(self, elapsed)
-    if self.data and self.text:GetText()~=self.data then
-      self.text:SetText(self.data)
-      StaticPopup_Resize(self, ""..ADDON_NAME.."_Confirm_Delete")
-      --_G[self:GetName().."AlertIcon"]:SetSize(20,20)
-    end
     if not CanOpen() then
       self:Hide()
+    else
+      local info = StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"]
+      if info and info.showAlert then
+        _G[self:GetName().."AlertIcon"]:SetTexture("Interface\\AddOns\\"..ADDON_NAME.."\\cup.tga")
+        _G[self:GetName().."AlertIcon"]:SetSize(28,28)
+      end
+      if self.data and self.text:GetText()~=self.data then
+        self.text:SetText(self.data)
+        StaticPopup_Resize(self, ""..ADDON_NAME.."_Confirm_Delete")
+        --_G[self:GetName().."AlertIcon"]:SetSize(20,20)
+      end
     end
   end,
 	OnCancel = function(self, data, reason)
@@ -891,7 +907,9 @@ do
     if t<(0.1+select(3, GetNetStats())/1000) then return end
     t=0
     
-    if not scanLaunched or (LootFrameAppearTime+1)>GetTime() or not LootFrame:IsVisible() then return end
+    if not scanLaunched or (LootFrameAppearTime+1)>GetTime() or not LootFrame:IsVisible() then 
+      return 
+    end
     
     for i=1,LOOTFRAME_NUMBUTTONS do
       local butt=_G["LootButton"..i]
