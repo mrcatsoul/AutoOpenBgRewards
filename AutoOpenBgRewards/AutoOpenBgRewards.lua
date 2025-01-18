@@ -1,4 +1,4 @@
--- 17.1.25
+-- 18.1.25
 
 local ADDON_NAME = ...
 local LOCALE = GetLocale()
@@ -621,7 +621,36 @@ SlashCmdList["opentestqweewq"] = function()
 end
 SLASH_opentestqweewq1 = "/opentest"
 
--- опции\настройки\конфиг
+-- опции: параметр/описание/значение по умолчанию для дефолт конфига
+local options =
+{
+  {"enable_addon","Включить аддон",true},
+  {"show_addon_log_in_chat","Выводить лог работы кода в чат",true},
+  {"auto_open_when_received","Открывать все боксы автоматически, при условии что не на кроссе",true},
+  {"auto_open_confirm","Всегда запрашивать разрешение пользователя перед массовым открытием боксов",true},
+  {"auto_del_trash_confirm","Всегда запрашивать разрешение пользователя перед массовым удалением мусора",true},
+  {"show_bags_when_processing","Показывать инвентарь(сумки) в процессе авто-открытия/удаления",true},
+  {"stop_if_less_then_X_free_bag_slots","Не открывать всё автоматом если меньше, чем "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках",true},
+  {"stop_if_more_then_X_money","Не открывать всё автоматом если больше, чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках",true},
+  {"auto_delete_mohawk_grenade","|cffff0000Удалять мусор: Индейская граната",false},
+  {"auto_delete_voodoo_skull","|cffff0000Удалять мусор: Череп вудуиста",false},
+  {"auto_delete_party_grenade","|cffff0000Удалять мусор: П.Е.Т.А.Р.Д.А. для вечеринки",false},
+  {"auto_delete_pot_of_nightmares","|cffff0000Удалять мусор: Зелье ночных кошмаров",false},
+  {"auto_delete_pot_powerful_rejuv","|cffff0000Удалять мусор: Мощное зелье омоложения",false},
+  {"auto_delete_flask_of_pure_mojo","|cffff0000Удалять мусор: Настой чистого колдунства",false},
+  {"auto_delete_path_of_cenarius","|cffff0000Удалять мусор: Путь Кенария",false},
+  {"auto_delete_path_of_illidan","|cffff0000Удалять мусор: Путь Иллидана",false},
+  {"auto_delete_runic_healing_potion","|cffff0000Удалять мусор: Рунический флакон с лечебным зельем",false},
+  {"auto_delete_murloc_costume_if_has","|cffff0000Удалять мусор: Костюм мурлока если такой уже имеется",false},
+  {"auto_delete_flag_of_ownership_if_has","|cffff0000Удалять мусор: Знамя победителя если то уже имеется",false},
+  {"auto_delete_soulbound_already_known_mounts_pets","|cffff0000Удалять мусор: персональные маунты/петы ("..ITEM_SOULBOUND..") если те уже изучены ("..ITEM_SPELL_KNOWN..")",false},
+  {"auto_delete_already_known_pets","|cffff0000Удалять мусор: уже изученные ("..ITEM_SPELL_KNOWN..") петы",false},
+  {"auto_delete_all_commons_pets","|cffff0000Удалять мусор: белые петы, даже если те НЕ изучены",false},
+  {"auto_delete_all_rare_epic_pets","|cffff0000Удалять мусор: синие петы, даже если те НЕ изучены",false},
+  --{"auto_delete_test_159","|cffff0000Удалять мусор: test",false},
+}
+
+-- опции\настройки\конфиг - создание фреймов
 local width, height = 800, 500
 local settingsScrollFrame = CreateFrame("ScrollFrame",ADDON_NAME.."SettingsScrollFrame",InterfaceOptionsFramePanelContainer,"UIPanelScrollFrameTemplate")
 settingsScrollFrame.name = ADDON_NAME_LOCALE_SHORT -- Название во вкладке интерфейса
@@ -650,41 +679,6 @@ settingsScrollFrame:SetScript("OnHide", function()
   settingsFrame:Hide()
 end)
 
-settingsFrame:RegisterEvent("ADDON_LOADED")
-settingsFrame:SetScript("onevent", function(_, event, ...) 
-  if arg1==ADDON_NAME then
-    cfg=AutoOpenBgRewards_Settings or {}
-    if AutoOpenBgRewards_Settings == nil then 
-      AutoOpenBgRewards_Settings = {}
-      cfg=AutoOpenBgRewards_Settings
-      _print("создание дефолтного конфига")
-      cfg["enable_addon"]=true
-      cfg["auto_open_when_received"]=true
-      cfg["show_addon_log_in_chat"]=true
-      cfg["stop_if_less_then_X_free_bag_slots"]=true
-      cfg["stop_if_more_then_X_money"]=true
-      cfg["auto_delete_mohawk_grenade"]=false
-      cfg["auto_delete_voodoo_skull"]=false
-      cfg["auto_delete_party_grenade"]=false
-      cfg["auto_delete_pot_of_nightmares"]=false
-      cfg["auto_delete_pot_powerful_rejuv"]=false
-      cfg["auto_delete_flask_of_pure_mojo"]=false
-      cfg["auto_delete_path_of_cenarius"]=false
-      cfg["auto_delete_runic_healing_potion"]=false
-      cfg["auto_delete_murloc_costume_if_has"]=false
-      cfg["auto_delete_flag_of_ownership_if_has"]=false
-      cfg["show_bags_when_processing"]=true
-      cfg["auto_delete_soulbound_already_known_mounts_pets"]=false
-      cfg["auto_delete_already_known_pets"]=false
-      cfg["auto_delete_all_commons_pets"]=false
-      cfg["auto_delete_all_rare_epic_pets"]=false
-      cfg["auto_open_confirm"]=true
-      cfg["auto_del_trash_confirm"]=true
-    end
-    _print("аддон загружен. Настройки: "..ChatLink("Настройки (кликабельно)","Settings").."")
-  end
-end)
-
 settingsFrame.TitleText = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 settingsFrame.TitleText:SetPoint("TOPLEFT", 24, -16)
 settingsFrame.TitleText:SetText(ADDON_NAME_LOCALE)
@@ -705,34 +699,7 @@ do
   end)
 end
 
-local options =
-{
-  {"enable_addon","Включить аддон"},
-  {"show_addon_log_in_chat","Выводить лог работы кода в чат"},
-  {"auto_open_when_received","Открывать все боксы автоматически, при условии что не на кроссе"},
-  {"auto_open_confirm","Всегда запрашивать разрешение пользователя перед массовым открытием боксов"},
-  {"auto_del_trash_confirm","Всегда запрашивать разрешение пользователя перед массовым удалением мусора"},
-  {"show_bags_when_processing","Показывать инвентарь(сумки) в процессе авто-открытия/удаления"},
-  {"stop_if_less_then_X_free_bag_slots","Не открывать всё автоматом если меньше, чем "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках"},
-  {"stop_if_more_then_X_money","Не открывать всё автоматом если больше, чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках"},
-  {"auto_delete_mohawk_grenade","|cffff0000Удалять мусор: Индейская граната"},
-  {"auto_delete_voodoo_skull","|cffff0000Удалять мусор: Череп вудуиста"},
-  {"auto_delete_party_grenade","|cffff0000Удалять мусор: П.Е.Т.А.Р.Д.А. для вечеринки"},
-  {"auto_delete_pot_of_nightmares","|cffff0000Удалять мусор: Зелье ночных кошмаров"},
-  {"auto_delete_pot_powerful_rejuv","|cffff0000Удалять мусор: Мощное зелье омоложения"},
-  {"auto_delete_flask_of_pure_mojo","|cffff0000Удалять мусор: Настой чистого колдунства"},
-  {"auto_delete_path_of_cenarius","|cffff0000Удалять мусор: Путь Кенария"},
-  {"auto_delete_path_of_illidan","|cffff0000Удалять мусор: Путь Иллидана"},
-  {"auto_delete_runic_healing_potion","|cffff0000Удалять мусор: Рунический флакон с лечебным зельем"},
-  {"auto_delete_murloc_costume_if_has","|cffff0000Удалять мусор: Костюм мурлока если такой уже имеется"},
-  {"auto_delete_flag_of_ownership_if_has","|cffff0000Удалять мусор: Знамя победителя если то уже имеется"},
-  {"auto_delete_soulbound_already_known_mounts_pets","|cffff0000Удалять мусор: персональные маунты/петы ("..ITEM_SOULBOUND..") если те уже изучены ("..ITEM_SPELL_KNOWN..")"},
-  {"auto_delete_already_known_pets","|cffff0000Удалять мусор: уже изученные ("..ITEM_SPELL_KNOWN..") петы"},
-  {"auto_delete_all_commons_pets","|cffff0000Удалять мусор: белые петы, даже если те НЕ изучены"},
-  {"auto_delete_all_rare_epic_pets","|cffff0000Удалять мусор: синие петы, даже если те НЕ изучены"},
-  --{"auto_delete_test_159","|cffff0000Удалять мусор: test"},
-}
-
+-- функция по созданию чекбокса для конфига
 local function CreateOptionCheckbox(optionName,optionDescription,num)
   local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
   checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -10-(num*10))
@@ -789,39 +756,59 @@ do
     CreateOptionCheckbox(v[1],v[2],num)
     num=num+2
   end
+  options=nil
 end
 
 f.settingsScrollFrame = settingsScrollFrame
 
+-- инициализация конфига при загрузке адона
+settingsFrame:RegisterEvent("ADDON_LOADED")
+settingsFrame:SetScript("onevent", function(_, event, ...) 
+  if arg1==ADDON_NAME then
+    cfg=AutoOpenBgRewards_Settings or {}
+    if AutoOpenBgRewards_Settings == nil then 
+      AutoOpenBgRewards_Settings = {}
+      cfg=AutoOpenBgRewards_Settings
+      for _,v in ipairs(options) do
+        cfg[v[1]]=v[3]
+      end
+      _print("создание дефолтного конфига")
+    end
+    _print("аддон загружен. Настройки: "..ChatLink("Настройки (кликабельно)","Settings").."")
+  end
+end)
+
+-- диалоговые окна по центру с запросом на подтверждение авто открытия/удаления 
 StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"] = {
-  text		  = ""..ADDON_NAME.."_Confirm_Delete",
-	button1		= YES,
-	button2		= CANCEL,
-  button3		= YES.." + не спрашивать",
-	--exclusive	= false,
-	timeout   = 0,
-	whileDead = false,
+  text      = ""..ADDON_NAME.."_Confirm_Delete",
+  button1    = YES,
+  button2    = CANCEL,
+  button3    = YES.." + не спрашивать",
+  --exclusive  = false,
+  timeout   = 0,
+  whileDead = false,
   notClosableByLogout = 0,
   showAlert = 1,
   hideOnEscape = true,
   --showAlertGear = 1,
   --closeButton = 1,
   --hideOnEscape = 1,
-	OnHide = function(self)
+  OnHide = function(self)
     self:Hide()
-	end,
-	OnAccept = function(self)
+  end,
+  OnAccept = function(self)
     f:ScanBags(""..ADDON_NAME.."_Confirm_Delete",true)
     self:Hide()
-	end,
+  end,
   OnUpdate = function(self, elapsed)
     if not CanDelete() then
       self:Hide()
     else
       local info = StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"]
       if info and info.showAlert then
-        _G[self:GetName().."AlertIcon"]:SetTexture("Interface\\AddOns\\"..ADDON_NAME.."\\pomoykawow.tga")
-        _G[self:GetName().."AlertIcon"]:SetSize(28,28)
+        local q=_G[self:GetName().."AlertIcon"]
+        q:SetTexture("Interface\\AddOns\\"..ADDON_NAME.."\\pomoykawow.tga")
+        q:SetSize(28,28)
       end
       if self.data and self.text:GetText()~=self.data then
         self.text:SetText(self.data)
@@ -829,45 +816,46 @@ StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"] = {
       end
     end
   end,
-	OnCancel = function(self, data, reason)
+  OnCancel = function(self, data, reason)
     self:Hide()
-	end,
+  end,
   OnAlt = function(self)
     cfg["auto_del_trash_confirm"]=false
     f:ScanBags(""..ADDON_NAME.."_Confirm_Delete",true)
     self:Hide()
   end,
-}	
+}  
 
 StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Open"] = {
-  text		  = ""..ADDON_NAME.."_Confirm_Open",
-	button1		= YES,
-	button2		= CANCEL,
-  button3		= YES.." + не спрашивать",
-	--exclusive	= false,
-	timeout   = 0,
-	whileDead = false,
+  text      = ""..ADDON_NAME.."_Confirm_Open",
+  button1    = YES,
+  button2    = CANCEL,
+  button3    = YES.." + не спрашивать",
+  --exclusive  = false,
+  timeout   = 0,
+  whileDead = false,
   notClosableByLogout = 0,
   showAlert = 1,
   hideOnEscape = true,
   --showAlertGear = 1,
   --closeButton = 1,
   --hideOnEscape = 1,
-	OnHide = function(self)
+  OnHide = function(self)
     self:Hide()
-	end,
-	OnAccept = function(self)
+  end,
+  OnAccept = function(self)
     f:ScanBags(""..ADDON_NAME.."_Confirm_Open",nil,true)
     self:Hide()
-	end,
+  end,
   OnUpdate = function(self, elapsed)
     if not CanOpen() then
       self:Hide()
     else
       local info = StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Delete"]
       if info and info.showAlert then
-        _G[self:GetName().."AlertIcon"]:SetTexture("Interface\\AddOns\\"..ADDON_NAME.."\\cup.tga")
-        _G[self:GetName().."AlertIcon"]:SetSize(28,28)
+        local q=_G[self:GetName().."AlertIcon"]
+        q:SetTexture("Interface\\AddOns\\"..ADDON_NAME.."\\cup.tga")
+        q:SetSize(28,28)
       end
       if self.data and self.text:GetText()~=self.data then
         self.text:SetText(self.data)
@@ -876,17 +864,17 @@ StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Open"] = {
       end
     end
   end,
-	OnCancel = function(self, data, reason)
+  OnCancel = function(self, data, reason)
     self:Hide()
-	end,
+  end,
   OnAlt = function(self)
     cfg["auto_open_confirm"]=false
     f:ScanBags(""..ADDON_NAME.."_Confirm_Open",nil,true)
     self:Hide()
   end,
-}	
+}  
 
--- хук для лут фрейма если тот багается (лут не собирается)
+-- хук для лут фрейма если тот багается (лут не собирается/авто-лут забагался)
 -- принудительно будем жать кнопки лута если фрейм показывается больше чем 1 секунду
 do
   local LootFrameAppearTime = 0
@@ -913,7 +901,7 @@ do
     
     for i=1,LOOTFRAME_NUMBUTTONS do
       local butt=_G["LootButton"..i]
-      if butt:IsVisible() then
+      if butt and butt:IsVisible() then
         _G["LootButton"..i]:Click()
         _print("force LootButton"..i..":Click()")
       else
