@@ -1,4 +1,4 @@
--- 18.1.25
+-- 22.1.25
 
 local ADDON_NAME = ...
 local LOCALE = GetLocale()
@@ -22,12 +22,16 @@ f:SetScript("OnEvent", function(self, event, ...) return self[event](self, ...) 
 local _,scanLaunched,bagsAreFull,InstanceType,curZone
 local lockedBagSlot,openTryCount,cfg,trashItemsCount,containerItemsCount={},{},{},{},{}
 local lastBagUpdTime=0
+local oldAutoLootState=GetCVar("autoLootDefault")
+
+local ZONE_ULDUAR = LOCALE=="ruRU" and "Ульдуар" or "Ulduar"
+local ZONE_AZSHARA_CRATER = LOCALE=="ruRU" and "Кратер Азшары" or "Azshara Crater"
 local AUCTION_ITEM_SUB_CATEGORY_PET = LOCALE=="ruRU" and "Питомцы" or "Pet"
 local AUCTION_ITEM_SUB_CATEGORY_MOUNT = LOCALE=="ruRU" and "Верховые животные" or "Mount"
 local BUG_CATEGORY13,ITEM_SOULBOUND,ITEM_SPELL_KNOWN = BUG_CATEGORY13,ITEM_SOULBOUND,ITEM_SPELL_KNOWN
-local oldAutoLootState=GetCVar("autoLootDefault")
-local ZONE_ULDUAR = LOCALE=="ruRU" and "Ульдуар" or "Ulduar"
-local ZONE_AZSHARA_CRATER = LOCALE=="ruRU" and "Кратер Азшары" or "Azshara Crater"
+local ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION = LOCALE=="ruRU" and "Использование: Учит призывать этого спутника." or "Use: Teaches you how to summon this companion."
+local ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT = LOCALE=="ruRU" and "Использование: Обучает управлению этим верховым животным. Это очень быстрое верховое животное." or "Use: Teaches you how to summon this mount.  This is a very fast mount."
+local ITEM_TOOLTIP_TEXT_MOUNT = LOCALE=="ruRU" and "Верховые животные" or "Mount"
 
 local GetContainerNumFreeSlots,GetItemInfo,GetItemCount = GetContainerNumFreeSlots,GetItemInfo,GetItemCount
 local GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID = GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID
@@ -185,6 +189,7 @@ local function inCrossZone()
   return false
 end
 
+--[[
 local function ItemIsSoulbound(bag,slot)
   if not (bag and slot) then return nil end
   f.Tip:ClearLines()
@@ -222,6 +227,78 @@ local function ItemIsAlreadyKnown(bag,slot)
   end
   --f.Tip:ClearLines()
   return false
+end
+
+local function ItemIsMount(bag,slot)
+  if not (bag and slot) then return nil end
+  f.Tip:ClearLines()
+  f.Tip:SetBagItem(bag,slot)
+  --f.Tip:Show()
+  for i = 1, f.Tip:NumLines() do
+    local text=_G[f.Tip:GetName().."TextLeft"..i]:GetText()
+    if (text == ITEM_TOOLTIP_TEXT_MOUNT or text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT) then
+      --local texture, count, locked, quality, readable, lootable, link = GetContainerItemInfo(bag,slot)
+      local link = GetContainerItemLink(bag,slot)
+      local id = GetContainerItemID(bag,slot)
+      _print("маунт детектед:",bag,slot,link,id)
+      return true
+    end
+  end
+  --f.Tip:ClearLines()
+  return false
+end
+
+local function ItemIsCompanion(bag,slot)
+  if not (bag and slot) then return nil end
+  f.Tip:ClearLines()
+  f.Tip:SetBagItem(bag,slot)
+  --f.Tip:Show()
+  for i = 1, f.Tip:NumLines() do
+    if (_G[f.Tip:GetName().."TextLeft"..i]:GetText() == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION) then
+      --local texture, count, locked, quality, readable, lootable, link = GetContainerItemInfo(bag,slot)
+      local link = GetContainerItemLink(bag,slot)
+      local id = GetContainerItemID(bag,slot)
+      _print("компанион детектед:",bag,slot,link,id)
+      return true
+    end
+  end
+  --f.Tip:ClearLines()
+  return false
+end
+]]
+
+local function GetItemTooltipInfo(bag,slot)
+  if not (bag and slot) then 
+    return nil,nil,nil,nil 
+  end
+  
+  f.Tip:ClearLines()
+  f.Tip:SetBagItem(bag,slot)
+  
+  local isSoulbound,isAlreadyKnown,isMount,isCompanion
+  
+  for i = 1, f.Tip:NumLines() do
+    local text = _G[f.Tip:GetName().."TextLeft"..i]:GetText()
+    
+    local link = GetContainerItemLink(bag,slot)
+    local id = GetContainerItemID(bag,slot)
+    
+    if (text == ITEM_SOULBOUND) then
+      isSoulbound=true
+      --_print("персональная шмотка детектед:",bag,slot,link,id)
+    elseif (text == ITEM_SPELL_KNOWN) then
+      isAlreadyKnown=true
+      _print("изученная шмотка детектед:",bag,slot,link,id)
+    elseif (text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION) then
+      isCompanion=true
+      _print("компанион детектед:",bag,slot,link,id)
+    elseif (text == ITEM_TOOLTIP_TEXT_MOUNT or text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT) then
+      isMount=true
+      _print("маунт детектед:",bag,slot,link,id)
+    end
+  end
+  
+  return isSoulbound,isAlreadyKnown,isMount,isCompanion
 end
 
 local function CannotScan()
@@ -312,7 +389,7 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
     t=t+elapsed
     
     --_print(t)
-    if t<(0.05+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт
+    if t<(0.05+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт. анти-тротл система
       return 
     end
     --if t<0.01 or LootFrame:IsVisible() then return end
@@ -361,8 +438,14 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
                   local countInBank=countFull-countInBags
                   
                   local _, _, quality, _, _, class, subclass = GetItemInfo(itemID)
+                  
+                  local isSoulbound,isAlreadyKnown,isMount,isCompanion
+                  
+                  if class and subclass and class==BUG_CATEGORY13 and (subclass==AUCTION_ITEM_SUB_CATEGORY_PET or subclass==AUCTION_ITEM_SUB_CATEGORY_MOUNT) then
+                    isSoulbound,isAlreadyKnown,isMount,isCompanion = GetItemTooltipInfo(bag,slot) -- судя по всему функция получилась жрущей, юзать ее осторожно - только для категорий маунтов/петов
+                  end
 
-                  if countInBags>0 and quality and class and subclass then
+                  if countInBags>0 and quality then
                     if (itemID==43489 and cfg["auto_delete_mohawk_grenade"]) or
                        (itemID==33081 and cfg["auto_delete_voodoo_skull"]) or
                        (itemID==38577 and cfg["auto_delete_party_grenade"]) or
@@ -374,10 +457,10 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
                        (itemID==33447 and cfg["auto_delete_runic_healing_potion"]) or
                        (itemID==33079 and cfg["auto_delete_murloc_costume_if_has"] and countFull > 1) or 
                        (itemID==38578 and cfg["auto_delete_flag_of_ownership_if_has"] and countFull > 1) or
-                       (cfg["auto_delete_soulbound_already_known_mounts_pets"] and class==BUG_CATEGORY13 and (subclass==AUCTION_ITEM_SUB_CATEGORY_PET or subclass==AUCTION_ITEM_SUB_CATEGORY_MOUNT) and ItemIsSoulbound(bag,slot) and ItemIsAlreadyKnown(bag,slot)) or
-                       (cfg["auto_delete_already_known_pets"] and class==BUG_CATEGORY13 and subclass==AUCTION_ITEM_SUB_CATEGORY_PET and ItemIsAlreadyKnown(bag,slot)) or
-                       (cfg["auto_delete_all_commons_pets"] and class==BUG_CATEGORY13 and subclass==AUCTION_ITEM_SUB_CATEGORY_PET and quality==1) or 
-                       (cfg["auto_delete_all_rare_epic_pets"] and class==BUG_CATEGORY13 and subclass==AUCTION_ITEM_SUB_CATEGORY_PET and (quality==3 or quality==4))
+                       (cfg["auto_delete_soulbound_already_known_mounts_pets"] and (isCompanion or isMount) and isSoulbound and isAlreadyKnown) or
+                       (cfg["auto_delete_already_known_pets"] and isCompanion and isAlreadyKnown) or -- изученные спутники
+                       (cfg["auto_delete_all_commons_pets"] and isCompanion and quality==1) or -- белые спутники
+                       (cfg["auto_delete_all_rare_epic_pets"] and isCompanion and (quality==3 --[[or quality==4]])) -- синие спутники
                        --or ((itemID==159 or itemID==1179 or itemID==1205 or itemID==1645 or itemID==1708 or itemID==2512 or itemID==12644 or itemID==41119) and cfg["auto_delete_test_159"]) -- test
                     then 
                       if not trashItemsCount[itemID] then
@@ -643,10 +726,10 @@ local options =
   {"auto_delete_runic_healing_potion","|cffff0000Удалять мусор: Рунический флакон с лечебным зельем",false},
   {"auto_delete_murloc_costume_if_has","|cffff0000Удалять мусор: Костюм мурлока если такой уже имеется",false},
   {"auto_delete_flag_of_ownership_if_has","|cffff0000Удалять мусор: Знамя победителя если то уже имеется",false},
-  {"auto_delete_soulbound_already_known_mounts_pets","|cffff0000Удалять мусор: персональные маунты/петы ("..ITEM_SOULBOUND..") если те уже изучены ("..ITEM_SPELL_KNOWN..")",false},
-  {"auto_delete_already_known_pets","|cffff0000Удалять мусор: уже изученные ("..ITEM_SPELL_KNOWN..") петы",false},
-  {"auto_delete_all_commons_pets","|cffff0000Удалять мусор: белые петы, даже если те НЕ изучены",false},
-  {"auto_delete_all_rare_epic_pets","|cffff0000Удалять мусор: синие петы, даже если те НЕ изучены",false},
+  {"auto_delete_soulbound_already_known_mounts_pets","|cffff0000Удалять мусор: персональные маунты/петы(спутники) если те уже изучены",false},
+  {"auto_delete_already_known_pets","|cffff0000Удалять мусор: уже изученные петы(спутники)",false},
+  {"auto_delete_all_commons_pets","|cffff0000Удалять мусор: белые петы(спутники), даже если те НЕ изучены",false},
+  {"auto_delete_all_rare_epic_pets","|cffff0000Удалять мусор: синие петы(спутники), даже если те НЕ изучены",false},
   --{"auto_delete_test_159","|cffff0000Удалять мусор: test",false},
 }
 
@@ -756,7 +839,7 @@ do
     CreateOptionCheckbox(v[1],v[2],num)
     num=num+2
   end
-  options=nil
+  --options=nil
 end
 
 f.settingsScrollFrame = settingsScrollFrame
@@ -764,18 +847,18 @@ f.settingsScrollFrame = settingsScrollFrame
 -- инициализация конфига при загрузке адона
 settingsFrame:RegisterEvent("ADDON_LOADED")
 settingsFrame:SetScript("onevent", function(_, event, ...) 
-  if arg1==ADDON_NAME then
-    cfg=AutoOpenBgRewards_Settings or {}
-    if AutoOpenBgRewards_Settings == nil then 
-      AutoOpenBgRewards_Settings = {}
-      cfg=AutoOpenBgRewards_Settings
-      for _,v in ipairs(options) do
-        cfg[v[1]]=v[3]
-      end
-      _print("создание дефолтного конфига")
+  if arg1~=ADDON_NAME then return end
+  cfg=AutoOpenBgRewards_Settings or {}
+  if AutoOpenBgRewards_Settings == nil then 
+    AutoOpenBgRewards_Settings = {}
+    cfg=AutoOpenBgRewards_Settings
+    for _,v in ipairs(options) do
+      cfg[v[1]]=v[3]
     end
-    _print("аддон загружен. Настройки: "..ChatLink("Настройки (кликабельно)","Settings").."")
+    options=nil
+    _print("создание дефолтного конфига")
   end
+  _print("аддон загружен. Настройки: "..ChatLink("Настройки (кликабельно)","Settings").."")
 end)
 
 -- диалоговые окна по центру с запросом на подтверждение авто открытия/удаления 
@@ -874,8 +957,7 @@ StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Open"] = {
   end,
 }  
 
--- хук для лут фрейма если тот багается (лут не собирается/авто-лут забагался)
--- принудительно будем жать кнопки лута если фрейм показывается больше чем 1 секунду
+-- принудительно будем жать кнопки лута если автолут забагался и фрейм показывается больше чем 1 секунду
 do
   local LootFrameAppearTime = 0
   LootFrame:HookScript("onshow",function()
