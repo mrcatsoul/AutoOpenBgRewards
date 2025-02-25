@@ -1,15 +1,18 @@
--- 22.1.25
+-- 24.2.25
 
-local ADDON_NAME = ...
+local ADDON_NAME, core = ...
+
 local LOCALE = GetLocale()
-local ADDON_NAME_LOCALE_SHORT = LOCALE=="ruRU" and GetAddOnMetadata(ADDON_NAME,"TitleS-ruRU") or GetAddOnMetadata(ADDON_NAME,"TitleShort")
+
 local ADDON_NAME_LOCALE = LOCALE=="ruRU" and GetAddOnMetadata(ADDON_NAME,"Title-ruRU") or GetAddOnMetadata(ADDON_NAME,"Title")
+local ADDON_NAME_LOCALE_SHORT = LOCALE=="ruRU" and GetAddOnMetadata(ADDON_NAME,"TitleS-ruRU") or GetAddOnMetadata(ADDON_NAME,"TitleShort")
 local ADDON_NOTES = LOCALE=="ruRU" and GetAddOnMetadata(ADDON_NAME,"Notes-ruRU") or GetAddOnMetadata(ADDON_NAME,"Notes")
+local ADDON_NAME_ABBREV = GetAddOnMetadata(ADDON_NAME,"TitleAbbrv")
+local ADDON_VERSION = GetAddOnMetadata(ADDON_NAME,"Version")
 
 local MIN_FREE_SLOTS_FOR_AUTO_OPEN = 5
 local MAX_MONEY_FOR_AUTO_OPEN = 210 * 10000000 -- первое число(210) = голда в касарях, лимит выше которого не будем опенить автоматом
 
---SetCVar("autoLootDefault","1")
 local f=CreateFrame("frame")
 f.Tip = CreateFrame("GameTooltip",ADDON_NAME.."_ItemCheckTooltip",nil,"GameTooltipTemplate")
 f.Tip:SetOwner(UIParent, "ANCHOR_NONE")
@@ -18,7 +21,7 @@ f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 f:RegisterEvent("PLAYER_LEAVING_WORLD")
 --f:RegisterEvent("PLAYER_LOGIN")
-f:SetScript("OnEvent", function(self, event, ...) return self[event](self, ...) end)
+f:SetScript("OnEvent", function(self, event, ...) self[event](self, ...) end)
 local _,scanLaunched,bagsAreFull,InstanceType,curZone
 local lockedBagSlot,openTryCount,cfg,trashItemsCount,containerItemsCount={},{},{},{},{}
 local lastBagUpdTime=0
@@ -36,6 +39,9 @@ local ITEM_TOOLTIP_TEXT_MOUNT = LOCALE=="ruRU" and "Верховые живот�
 local GetContainerNumFreeSlots,GetItemInfo,GetItemCount = GetContainerNumFreeSlots,GetItemInfo,GetItemCount
 local GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID = GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID
 local GetContainerItemLink = GetContainerItemLink
+local GetNetStats, GetTime = GetNetStats, GetTime
+local UnitExists, UnitIsDead, UnitIsConnected = UnitExists, UnitIsDead, UnitIsConnected
+local SetCVar, GetCVar = SetCVar, GetCVar
 
 -- стремные функции, которые будут использоваться в коде. надеюсь все проверки правильно сделаю... 
 local ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem=ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem
@@ -47,6 +53,7 @@ local containerIDs =
   38702, -- красный
   10594, -- сундук наград с поля боя
   44816, -- скари лутбокс
+  8507,  -- Festive
   --44951, -- ящик бомб (на тест)
 }
 
@@ -78,7 +85,7 @@ end
 
 local function _print(msg,msg2,msg3)
   if cfg["show_addon_log_in_chat"] then
-    print(""..ChatLink(ADDON_NAME_LOCALE_SHORT,"Settings","3399ff")..": "..msg, msg2 and "("..msg2..")" or "", msg3 and "("..msg3..")" or "")
+    print(""..ChatLink(ADDON_NAME_ABBREV,"Settings","3399ff")..": "..msg, msg2 and "("..msg2..")" or "", msg3 and "("..msg3..")" or "")
   end
 end
 
@@ -90,10 +97,10 @@ DEFAULT_CHAT_FRAME:HookScript("OnHyperlinkClick", function(self, link, str, butt
       InterfaceOptionsFrame_OpenToCategory(f.settingsScrollFrame)
     elseif arg2 == "Confirm_Delete" then
       --f:ScanBags(""..ADDON_NAME.."_Confirm_Delete",true)
-      f:ScanBags("OnHyperlinkClick", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+      f:ScanBags("OnHyperlinkClick", not cfg["auto_del_trash_confirm"], cfg["auto_open_when_received"] and not cfg["auto_open_confirm"])
     elseif arg2 == "Confirm_Open" then
       --f:ScanBags(""..ADDON_NAME.."_Confirm_Open",nil,true)
-      f:ScanBags("OnHyperlinkClick", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+      f:ScanBags("OnHyperlinkClick", not cfg["auto_del_trash_confirm"], cfg["auto_open_when_received"] and not cfg["auto_open_confirm"])
     end
   end
 end)
@@ -124,8 +131,7 @@ function f:BAG_UPDATE(...)
   if lastBagUpdTime>=(GetTime()-0.1) then return end
   lastBagUpdTime=GetTime()
   --print("BAG_UPDATE (+)")
-  f:ScanBags("BAG_UPDATE", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
-  --f:ScanBags("BAG_UPDATE", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+  f:ScanBags("BAG_UPDATE", not cfg["auto_del_trash_confirm"], cfg["auto_open_when_received"] and not cfg["auto_open_confirm"])
 end
 
 local function getNumFreeBagSlots()
@@ -144,27 +150,26 @@ local function getNumFreeBagSlots()
 end
 
 function f:PLAYER_ENTERING_WORLD(byCheckbox)
-  --print("PLAYER_ENTERING_WORLD")
   InstanceType = select(2,IsInInstance())
   curZone=GetZoneText()
   lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
   oldAutoLootState=GetCVar("autoLootDefault")
+  
   if not cfg["enable_addon"] then return end
+  
+  if byCheckbox then _print("f:PLAYER_ENTERING_WORLD(byCheckbox)") end
+  
   local t = not byCheckbox and GetTime()+1 or 0
+  
   CreateFrame("frame"):SetScript("OnUpdate", function(self)
     if t<GetTime() then
       if not f:IsEventRegistered("BAG_UPDATE") then
         f:RegisterEvent("BAG_UPDATE")
         _print("RegisterEvent BAG_UPDATE")
       end
-      --local forceAutoDelTrash=cfg["auto_del_trash_confirm"]==true and false or 1
-      --local forceAutoOpen=cfg["auto_open_confirm"]==true and false or 1
-      --print(forceAutoDelTrash,forceAutoOpen)
-      f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
-      --f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+      f:ScanBags("PLAYER_ENTERING_WORLD", not cfg["auto_del_trash_confirm"], cfg["auto_open_when_received"] and not cfg["auto_open_confirm"]) -- скан при входе в игру
       self:SetScript("OnUpdate", nil)
       self=nil
-      return
     end
   end)
 end
@@ -291,7 +296,7 @@ local function GetItemTooltipInfo(bag,slot)
       _print("изученная шмотка детектед:",bag,slot,link,id)
     elseif (text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION) then
       isCompanion=true
-      _print("компанион детектед:",bag,slot,link,id)
+      _print("пет детектед:",bag,slot,link,id)
     elseif (text == ITEM_TOOLTIP_TEXT_MOUNT or text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT) then
       isMount=true
       _print("маунт детектед:",bag,slot,link,id)
@@ -333,7 +338,8 @@ local function CanOpen()
     UnitExists("npc") 
     or UnitIsDead("player") 
     or MerchantFrame:IsVisible() 
-    or MailFrame:IsVisible()
+    or SendMailFrame:IsVisible()
+    --or MailFrame:IsVisible()
     or TradeFrame:IsVisible()
     or BankFrame:IsVisible() 
     or (AuctionFrame and AuctionFrame:IsVisible())
@@ -352,29 +358,37 @@ local function CanOpen()
 end
 
 local function CanDelete()
-  if GetCursorInfo()==nil then
-    return true
+  if GetCursorInfo()~=nil then
+    return false
+  end
+  for k,v in pairs(cfg) do
+    if k:find("auto_delete") and v==true then
+      return true
+    end
   end
   return false
 end
 
-function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
+function f:ScanBags(reason, ForceDelTrash, ForceOpen)
   --print("CanOpen()",CanOpen(),"CannotScan()",CannotScan(),"scanLaunched",scanLaunched)
   if CannotScan() then 
     --_print("|cffff0000CannotOpen()|r",reason)
     return 
   end
   
-  --print("forceAutoDelTrash:",forceAutoDelTrash,"forceAutoOpen:",forceAutoOpen)
+  --print("ForceDelTrash:",ForceDelTrash,"ForceOpen:",ForceOpen)
 
   --_print("|cff00ff00запуск скана итемов...|r", reason..", "..curZone..", "..tostring(inCrossZone())..", "..select(2,IsInInstance()).."")
-  _print("|cff00ff00запуск скана итемов...|r", reason)
+  _print("|cff00ffffзапуск скана итемов...|r", reason)
   scanLaunched=true
   local t=0
   
+  --local scanForTrash=not ForceDelTrash
+  --local scanForOpen=not ForceOpen
+  
   f:SetScript("OnUpdate",function(_,elapsed)
     if not scanLaunched then
-      _print("|cffff0000скан итемов отмененен по одной из причин: открытие окна вендора/трейда/гб/банка/аука/взаимодействие с нпц/смерть перса/нахождение на кросе/фул сумки/итем заблокирован/не открывается/автолут забагался/лимит голды на открытие в опциях/не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." слотов в сумках в опциях|r")
+      _print("|cffff0000скан итемов отмененен по одной из причин: открытие окна вендора/отправки почты/трейда/гб/банка/аука/взаимодействие с нпц/смерть перса/нахождение на кросе/фул сумки/итем заблокирован/не открывается/автолут забагался/лимит голды на открытие в опциях/не открывать если меньше "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." слотов в сумках в опциях|r")
       bagsAreFull=nil
       lockedBagSlot,openTryCount,trashItemsCount,containerItemsCount={},{},{},{}
       
@@ -389,102 +403,99 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
     t=t+elapsed
     
     --_print(t)
-    if t<(0.05+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт. анти-тротл система
+    if t<(0.03+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт. анти-тротл система
       return 
     end
     --if t<0.01 or LootFrame:IsVisible() then return end
 
-    -- сначала скан по очистке, удалять вроде как можно на кроссе
-    if not forceAutoOpen and CanDelete() and not (reason and reason=="/opentest") then
-      local _true
-      for k,v in pairs(cfg) do
-        if k:find("auto_delete") and v==true then
-          --print(k)
-          _true=true
-          break
-        end
-      end
+    -- скан по очистке мусора. если не выбран режим форс автооткрытия 
+    if not ForceOpen and CanDelete() then
+      for bag = 0,4 do
+        for slot = 1,GetContainerNumSlots(bag) do
+          local itemID = GetContainerItemID(bag,slot)
 
-      if _true then --print("test3")
-        for bag = 0,4 do
-          for slot = 1,GetContainerNumSlots(bag) do
-            local itemID = GetContainerItemID(bag,slot)
+          if itemID then 
+            --local itemLink = GetContainerItemLink(bag,slot)
+            --local itemName = GetItemInfo(itemID)
+            local _, _, locked, _, _, _, itemLink = GetContainerItemInfo(bag,slot)
+            
+            if itemLink then
+                
+              --local q=ItemIsAlreadyKnown(bag,slot)
+              --local w=ItemIsSoulbound(bag,slot)
+              -- if ItemIsAlreadyKnown(bag,slot) then
+                -- print("ItemIsAlreadyKnown",itemLink)
+              -- end
+                
+              if locked then
+                lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
+                _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+                if lockedBagSlot[bag.."-"..slot] > 20 then
+                  _print("|cffff0000скан итемов по очистке мусора прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
+                  scanLaunched=nil
+                  return
+                end
+                --return
+              else
+                local countInBags=GetItemCount(itemID)
+                local countFull=GetItemCount(itemID,true)
+                local countInBank=countFull-countInBags
+                
+                local _, _, quality, _, _, class, subclass = GetItemInfo(itemID)
+                
+                local isSoulbound,isAlreadyKnown,isMount,isCompanion
+                
+                if class and subclass and class==BUG_CATEGORY13 and (subclass==AUCTION_ITEM_SUB_CATEGORY_PET or subclass==AUCTION_ITEM_SUB_CATEGORY_MOUNT) then
+                  isSoulbound,isAlreadyKnown,isMount,isCompanion = GetItemTooltipInfo(bag,slot) -- судя по всему функция получилась жрущей, юзать ее осторожно - только для категорий маунтов/петов
+                end
 
-            if itemID then 
-              --local itemLink = GetContainerItemLink(bag,slot)
-              --local itemName = GetItemInfo(itemID)
-              local _, _, locked, _, _, _, itemLink = GetContainerItemInfo(bag,slot)
-              
-              if itemLink then
-                  
-                --local q=ItemIsAlreadyKnown(bag,slot)
-                --local w=ItemIsSoulbound(bag,slot)
-                -- if ItemIsAlreadyKnown(bag,slot) then
-                  -- print("ItemIsAlreadyKnown",itemLink)
-                -- end
-                  
-                if locked then
-                  lockedBagSlot[bag.."-"..slot] = lockedBagSlot[bag.."-"..slot] and lockedBagSlot[bag.."-"..slot]+1 or 1
-                  _print("|cffff0000итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
-                  if lockedBagSlot[bag.."-"..slot] > 20 then
-                    _print("|cffff0000скан итемов по очистке мусора прерван, итем заблокирован (x"..lockedBagSlot[bag.."-"..slot].."):|r",itemLink)
-                    scanLaunched=nil
-                    return
-                  end
-                  --return
-                else
-                  local countInBags=GetItemCount(itemID)
-                  local countFull=GetItemCount(itemID,true)
-                  local countInBank=countFull-countInBags
-                  
-                  local _, _, quality, _, _, class, subclass = GetItemInfo(itemID)
-                  
-                  local isSoulbound,isAlreadyKnown,isMount,isCompanion
-                  
-                  if class and subclass and class==BUG_CATEGORY13 and (subclass==AUCTION_ITEM_SUB_CATEGORY_PET or subclass==AUCTION_ITEM_SUB_CATEGORY_MOUNT) then
-                    isSoulbound,isAlreadyKnown,isMount,isCompanion = GetItemTooltipInfo(bag,slot) -- судя по всему функция получилась жрущей, юзать ее осторожно - только для категорий маунтов/петов
-                  end
-
-                  if countInBags>0 and quality then
-                    if (itemID==43489 and cfg["auto_delete_mohawk_grenade"]) or
-                       (itemID==33081 and cfg["auto_delete_voodoo_skull"]) or
-                       (itemID==38577 and cfg["auto_delete_party_grenade"]) or
-                       (itemID==40081 and cfg["auto_delete_pot_of_nightmares"]) or
-                       (itemID==40087 and cfg["auto_delete_pot_powerful_rejuv"]) or
-                       (itemID==46378 and cfg["auto_delete_flask_of_pure_mojo"]) or
-                       (itemID==46779 and cfg["auto_delete_path_of_cenarius"]) or
-                       (itemID==38233 and cfg["auto_delete_path_of_illidan"]) or
-                       (itemID==33447 and cfg["auto_delete_runic_healing_potion"]) or
-                       (itemID==33079 and cfg["auto_delete_murloc_costume_if_has"] and countFull > 1) or 
-                       (itemID==38578 and cfg["auto_delete_flag_of_ownership_if_has"] and countFull > 1) or
-                       (cfg["auto_delete_soulbound_already_known_mounts_pets"] and (isCompanion or isMount) and isSoulbound and isAlreadyKnown) or
-                       (cfg["auto_delete_already_known_pets"] and isCompanion and isAlreadyKnown) or -- изученные спутники
-                       (cfg["auto_delete_all_commons_pets"] and isCompanion and quality==1) or -- белые спутники
-                       (cfg["auto_delete_all_rare_epic_pets"] and isCompanion and (quality==3 --[[or quality==4]])) -- синие спутники
-                       --or ((itemID==159 or itemID==1179 or itemID==1205 or itemID==1645 or itemID==1708 or itemID==2512 or itemID==12644 or itemID==41119) and cfg["auto_delete_test_159"]) -- test
-                    then 
-                      if not trashItemsCount[itemID] then
-                        local countToDel=countInBags
-                        if itemID==33079 or itemID==38578 then
-                          countToDel=countInBank>0 and countInBags or countInBags-1
-                        end
-                        trashItemsCount[itemID]=countToDel
+                if countInBags>0 and quality then
+                  if (itemID==43489 and cfg["auto_delete_mohawk_grenade"]) or
+                     (itemID==33081 and cfg["auto_delete_voodoo_skull"]) or
+                     (itemID==38577 and cfg["auto_delete_party_grenade"]) or
+                     (itemID==40081 and cfg["auto_delete_pot_of_nightmares"]) or
+                     (itemID==40087 and cfg["auto_delete_pot_powerful_rejuv"]) or
+                     (itemID==46378 and cfg["auto_delete_flask_of_pure_mojo"]) or
+                     (itemID==46779 and cfg["auto_delete_path_of_cenarius"]) or
+                     (itemID==38233 and cfg["auto_delete_path_of_illidan"]) or
+                     (itemID==33447 and cfg["auto_delete_runic_healing_potion"]) or
+                     (itemID==35223 and cfg["auto_delete_pet_biscuit"]) or
+                     (itemID==36930 and cfg["auto_delete_monarch_topaz"]) or
+                     (itemID==36918 and cfg["auto_delete_scarlet_ruby"]) or
+                     (itemID==36924 and cfg["auto_delete_sky_sapphire"]) or
+                     (itemID==36921 and cfg["auto_delete_autumns_glow"]) or
+                     (itemID==36927 and cfg["auto_delete_twilight_opal"]) or
+                     (itemID==36933 and cfg["auto_delete_forest_emerald"]) or
+                     (itemID==33448 and cfg["auto_delete_runic_mana_potion"]) or
+                     (itemID==33079 and cfg["auto_delete_murloc_costume_if_has"] and countFull > 1) or 
+                     (itemID==38578 and cfg["auto_delete_flag_of_ownership_if_has"] and countFull > 1) or
+                     (cfg["auto_delete_soulbound_already_known_mounts_pets"] and (isCompanion or isMount) and isSoulbound and isAlreadyKnown) or
+                     (cfg["auto_delete_already_known_pets"] and isCompanion and isAlreadyKnown) or -- изученные спутники
+                     (cfg["auto_delete_all_commons_pets"] and isCompanion and quality==1) or -- белые спутники
+                     (cfg["auto_delete_all_rare_epic_pets"] and isCompanion and (quality==3 --[[or quality==4]])) -- синие спутники
+                     --or ((itemID==159 or itemID==1179 or itemID==1205 or itemID==1645 or itemID==1708 or itemID==2512 or itemID==12644 or itemID==41119) and cfg["auto_delete_test_159"]) -- test
+                  then 
+                    if not trashItemsCount[itemID] then
+                      local countToDel=countInBags
+                      if itemID==33079 or itemID==38578 then
+                        countToDel=countInBank>0 and countInBags or countInBags-1
                       end
+                      trashItemsCount[itemID]=countToDel
+                    end
 
-                      if forceAutoDelTrash then
-                        if cfg["show_bags_when_processing"] then
-                          OpenAllBags(true)
-                        end
-                      
-                        _print("|cffff0000удаляем мусор:|r",itemLink)
-                        ClearCursor()
-                        PickupContainerItem(bag, slot)
-                        DeleteCursorItem()
-                        lockedBagSlot[bag.."-"..slot]=nil
-                        trashItemsCount[itemID]=nil
-                        t=0
-                        return
+                    if ForceDelTrash then
+                      if cfg["show_bags_when_processing"] then
+                        OpenAllBags(true)
                       end
+                    
+                      _print("|cffff0000удаляем мусор:|r",itemLink)
+                      ClearCursor()
+                      PickupContainerItem(bag, slot)
+                      DeleteCursorItem()
+                      lockedBagSlot[bag.."-"..slot]=nil
+                      trashItemsCount[itemID]=nil
+                      t=0
+                      return
                     end
                   end
                 end
@@ -492,13 +503,13 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
             end
           end
         end
-        
-        _print("|cff00ff00сумки на наличие мусора просканированы|r",reason)
       end
+      
+      _print("|cff00ff00сумки на наличие мусора просканированы|r",reason)
     end
     
-    -- потом по открытию. тут условия по жестче
-    if not forceAutoDelTrash and cfg["auto_open_when_received"] then
+    -- скан по автооткрытию. если не выбран режим форс удаления и включена опция по автооткрытию
+    if not ForceDelTrash and cfg["auto_open_when_received"] then
       for bag = 0,4 do
         for slot = 1,GetContainerNumSlots(bag) do
           local itemID = GetContainerItemID(bag,slot)
@@ -524,7 +535,7 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
                     containerItemsCount[itemID]=GetItemCount(itemID)
                   end
                 
-                  if forceAutoOpen then
+                  if ForceOpen then
                     if UnitExists("npc") then
                       _print("|cffff0000опен итемов прерван изза взаимодействия с нпц|r")
                       scanLaunched=nil
@@ -543,8 +554,8 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
                       return 
                     end
                     
-                    if MailFrame:IsVisible() then
-                      _print("|cffff0000опен итемов прерван изза открытия окна почты|r")
+                    if --[[MailFrame:IsVisible()]] SendMailFrame:IsVisible() then
+                      _print("|cffff0000опен итемов прерван изза открытия окна отправки почты|r")
                       scanLaunched=nil
                       return 
                     end
@@ -613,7 +624,7 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
                     
                     lockedBagSlot[bag.."-"..slot]=nil
                     
-                    if openTryCount[bag.."-"..slot] > 10 then
+                    if openTryCount[bag.."-"..slot] > 50 then
                       _print("|cffff0000опен итемов прерван, итем не открывается (x"..openTryCount[bag.."-"..slot].."):|r", itemLink, bag, slot)
                       scanLaunched=nil
                     end
@@ -629,56 +640,54 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
       end
     end
     
-    if not (forceAutoDelTrash or forceAutoOpen) then
-      --print("test2",tablelength(trashItemsCount))
-      if cfg["auto_del_trash_confirm"] and tablelength(trashItemsCount)>0 and CanDelete() then
-        --print("test1")
-        local allItemsText = ""
-        local num = 0
-        
-        for itemID,itemCount in pairs(trashItemsCount) do
-          local name, link, quality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
-          if name and quality and texture and link then  
-            num=num+1
-            --local r, g, b = GetItemQualityColor(quality)
-            --local qualityColorHex = rgbToHex(r, g, b)
-            local curItemText = "|T" .. texture .. ":14|t " ..link.. " |cff888888" .. "x" ..itemCount.. "|r"
-            allItemsText = allItemsText == "" and curItemText or allItemsText .. "\n" .. curItemText
-          end
-        end
-        
-        local popup = StaticPopup_Show(""..ADDON_NAME.."_Confirm_Delete")
-        if popup then
-          popup.data = "|cff44aaeeВ сумках найден следующий мусор:|r\n\n"..allItemsText.."\n\n|cffff0000УДАЛИМ ЭТОТ ТРЭШ, БРО?|r"
-          _print("\n"..popup.data.." "..ChatLink("Удалить трэш (кликабельно)","Confirm_Delete"))
+    -- сводка по мусору/боксам если не выбран режим форс удаления/открытия
+    if not ForceDelTrash and cfg["auto_del_trash_confirm"] and tablelength(trashItemsCount)>0 and CanDelete() then
+      --print("test1")
+      local allItemsText = ""
+      local num = 0
+      
+      for itemID,itemCount in pairs(trashItemsCount) do
+        local name, link, quality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+        if name and quality and texture and link then  
+          num=num+1
+          --local r, g, b = GetItemQualityColor(quality)
+          --local qualityColorHex = rgbToHex(r, g, b)
+          local curItemText = "|T" .. texture .. ":14|t " ..link.. " |cff888888" .. "x" ..itemCount.. "|r"
+          allItemsText = allItemsText == "" and curItemText or allItemsText .. "\n" .. curItemText
         end
       end
       
-      if cfg["auto_open_confirm"] and tablelength(containerItemsCount)>0 and CanOpen() then
-        --print("test2")
-        local allItemsText = ""
-        local num = 0
-        
-        for itemID,itemCount in pairs(containerItemsCount) do
-          local name, link, quality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
-          if name and quality and texture and link then
-            num=num+1
-            --local r, g, b = GetItemQualityColor(quality)
-            --local qualityColorHex = rgbToHex(r, g, b)
-            local curItemText = "|T" .. texture .. ":14|t " ..link.. " |cff888888" .. "x" ..itemCount.. "|r"
-            allItemsText = allItemsText == "" and curItemText or allItemsText .. "\n" .. curItemText
-          end
+      local popup = StaticPopup_Show(""..ADDON_NAME.."_Confirm_Delete")
+      if popup then
+        popup.data = "|cff44aaeeВ сумках найден следующий мусор:|r\n\n"..allItemsText.."\n\n|T" .. STATICPOPUP_TEXTURE_ALERT .. ":15|t |cffff0000УДАЛИМ ЭТОТ ТРЭШ, БРО?|r"
+        _print("\n"..popup.data.." => "..ChatLink("Удалить трэш (кликабельно)","Confirm_Delete").." <=")
+      end
+    end
+    
+    if not ForceOpen and cfg["auto_open_confirm"] and tablelength(containerItemsCount)>0 and CanOpen() then
+      --print("test2")
+      local allItemsText = ""
+      local num = 0
+      
+      for itemID,itemCount in pairs(containerItemsCount) do
+        local name, link, quality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+        if name and quality and texture and link then
+          num=num+1
+          --local r, g, b = GetItemQualityColor(quality)
+          --local qualityColorHex = rgbToHex(r, g, b)
+          local curItemText = "|T" .. texture .. ":14|t " ..link.. " |cff888888" .. "x" ..itemCount.. "|r"
+          allItemsText = allItemsText == "" and curItemText or allItemsText .. "\n" .. curItemText
         end
-        
-        local popup = StaticPopup_Show(""..ADDON_NAME.."_Confirm_Open")
-        if popup then
-          popup.data = "|cff44aaeeВ сумках найден следующий контейнер:|r\n\n"..allItemsText.."\n\n|cffff0000Открываем всё?|r"
-          _print("\n"..popup.data.." "..ChatLink("Открыть всё (кликабельно)","Confirm_Open"))
-        end
+      end
+      
+      local popup = StaticPopup_Show(""..ADDON_NAME.."_Confirm_Open")
+      if popup then
+        popup.data = "|cff44aaeeВ сумках найден следующий контейнер:|r\n\n"..allItemsText.."\n\n|cffff0000Открываем всё?|r"
+        _print("\n"..popup.data.." "..ChatLink("Открыть всё (кликабельно)","Confirm_Open"))
       end
     end
 
-    _print("|cff00ff00скан итемов завершен успешно|r",reason)
+    _print("|cff00ffffскан итемов завершен успешно|r",reason)
     scanLaunched=nil
     bagsAreFull=nil
     lockedBagSlot,openTryCount,trashItemsCount,containerItemsCount={},{},{},{}
@@ -689,54 +698,68 @@ function f:ScanBags(reason,forceAutoDelTrash,forceAutoOpen)
     
     f:SetScript("OnUpdate",nil)
     
-    if forceAutoDelTrash then
-      f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
-    elseif forceAutoOpen then
-      f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
-    end
+    -- if ForceDelTrash then
+      -- f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+    -- elseif ForceOpen then
+      -- f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
+    -- end
     
     return
   end)
 end
 
-SlashCmdList["opentestqweewq"] = function()
-  f:ScanBags("/opentest") 
-end
-SLASH_opentestqweewq1 = "/opentest"
+-- SlashCmdList["opentestqweewq"] = function()
+  -- f:ScanBags("/opentest") 
+-- end
+-- SLASH_opentestqweewq1 = "/opentest"
 
 -- опции: параметр/описание/значение по умолчанию для дефолт конфига
 local options =
 {
-  {"enable_addon","Включить аддон",true},
-  {"show_addon_log_in_chat","Выводить лог работы кода в чат",true},
-  {"auto_open_when_received","Открывать все боксы автоматически, при условии что не на кроссе",true},
-  {"auto_open_confirm","Всегда запрашивать разрешение пользователя перед массовым открытием боксов",true},
-  {"auto_del_trash_confirm","Всегда запрашивать разрешение пользователя перед массовым удалением мусора",true},
-  {"show_bags_when_processing","Показывать инвентарь(сумки) в процессе авто-открытия/удаления",true},
-  {"stop_if_less_then_X_free_bag_slots","Не открывать всё автоматом если меньше, чем "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках",true},
-  {"stop_if_more_then_X_money","Не открывать всё автоматом если больше, чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках",true},
-  {"auto_delete_mohawk_grenade","|cffff0000Удалять мусор: Индейская граната",false},
-  {"auto_delete_voodoo_skull","|cffff0000Удалять мусор: Череп вудуиста",false},
-  {"auto_delete_party_grenade","|cffff0000Удалять мусор: П.Е.Т.А.Р.Д.А. для вечеринки",false},
-  {"auto_delete_pot_of_nightmares","|cffff0000Удалять мусор: Зелье ночных кошмаров",false},
-  {"auto_delete_pot_powerful_rejuv","|cffff0000Удалять мусор: Мощное зелье омоложения",false},
-  {"auto_delete_flask_of_pure_mojo","|cffff0000Удалять мусор: Настой чистого колдунства",false},
-  {"auto_delete_path_of_cenarius","|cffff0000Удалять мусор: Путь Кенария",false},
-  {"auto_delete_path_of_illidan","|cffff0000Удалять мусор: Путь Иллидана",false},
-  {"auto_delete_runic_healing_potion","|cffff0000Удалять мусор: Рунический флакон с лечебным зельем",false},
-  {"auto_delete_murloc_costume_if_has","|cffff0000Удалять мусор: Костюм мурлока если такой уже имеется",false},
-  {"auto_delete_flag_of_ownership_if_has","|cffff0000Удалять мусор: Знамя победителя если то уже имеется",false},
-  {"auto_delete_soulbound_already_known_mounts_pets","|cffff0000Удалять мусор: персональные маунты/петы(спутники) если те уже изучены",false},
-  {"auto_delete_already_known_pets","|cffff0000Удалять мусор: уже изученные петы(спутники)",false},
-  {"auto_delete_all_commons_pets","|cffff0000Удалять мусор: белые петы(спутники), даже если те НЕ изучены",false},
-  {"auto_delete_all_rare_epic_pets","|cffff0000Удалять мусор: синие петы(спутники), даже если те НЕ изучены",false},
-  --{"auto_delete_test_159","|cffff0000Удалять мусор: test",false},
+  -- [1] - settingName, 
+  -- [2] - checkboxText, 
+  -- [3] - tooltipText, 
+  -- [4] - значение по умолчанию, не должно быть nil
+  -- [5] - minValue, 
+  -- [6] - maxValue  
+  {"enable_addon","Включить аддон",nil,true},
+  {"show_addon_log_in_chat","Выводить лог работы аддона в чат |cffffff00(рекомендуется оставить включенным)",nil,true},
+  {"auto_open_when_received","Открывать все боксы автоматически, когда мы не на кроссе",nil,true},
+  {"auto_open_confirm","Всегда спрашивать разрешение перед массовым открытием боксов",nil,true},
+  {"auto_del_trash_confirm","Всегда спрашивать разрешение перед массовым удалением мусора",nil,true},
+  {"show_bags_when_processing","Показывать инвентарь(сумки) в процессе открытия/удаления",nil,true},
+  {"stop_if_less_then_X_free_bag_slots","Не открывать боксы если меньше чем "..MIN_FREE_SLOTS_FOR_AUTO_OPEN.." свободных слотов в сумках",nil,true},
+  {"stop_if_more_then_X_money","Не открывать боксы если больше чем "..(MAX_MONEY_FOR_AUTO_OPEN/10000000).."к голды в сумках",nil,true},
+  {"auto_delete_mohawk_grenade","|cffff0000Удалять мусор: Индейская граната",nil,false},
+  {"auto_delete_voodoo_skull","|cffff0000Удалять мусор: Череп вудуиста",nil,false},
+  {"auto_delete_party_grenade","|cffff0000Удалять мусор: П.Е.Т.А.Р.Д.А. для вечеринки",nil,false},
+  {"auto_delete_pot_of_nightmares","|cffff0000Удалять мусор: Зелье ночных кошмаров",nil,false},
+  {"auto_delete_pot_powerful_rejuv","|cffff0000Удалять мусор: Мощное зелье омоложения",nil,false},
+  {"auto_delete_flask_of_pure_mojo","|cffff0000Удалять мусор: Настой чистого колдунства",nil,false},
+  {"auto_delete_path_of_cenarius","|cffff0000Удалять мусор: Путь Кенария",nil,false},
+  {"auto_delete_path_of_illidan","|cffff0000Удалять мусор: Путь Иллидана",nil,false},
+  {"auto_delete_runic_healing_potion","|cffff0000Удалять мусор: Рунический флакон с лечебным зельем",nil,false},
+  {"auto_delete_murloc_costume_if_has","|cffff0000Удалять мусор: Костюм мурлока если уже есть",nil,false},
+  {"auto_delete_flag_of_ownership_if_has","|cffff0000Удалять мусор: Знамя победителя если уже есть",nil,false},
+  {"auto_delete_soulbound_already_known_mounts_pets","|cffff0000Удалять мусор: персональные маунты/петы(спутники) если те уже изучены",nil,false},
+  {"auto_delete_already_known_pets","|cffff0000Удалять мусор: уже изученные петы(спутники)",nil,false},
+  {"auto_delete_all_commons_pets","|cffff0000Удалять мусор: белые петы(спутники), даже если те НЕ изучены",nil,false},
+  {"auto_delete_all_rare_epic_pets","|cffff0000Удалять мусор: синие петы(спутники), даже если те НЕ изучены",nil,false},
+  {"auto_delete_pet_biscuit","|cffff0000Удалять мусор: Старомодное лакомство для питомцев",nil,false},
+  {"auto_delete_monarch_topaz","|cffff0000Удалять мусор: Императорский топаз",nil,false}, -- 36930
+  {"auto_delete_scarlet_ruby","|cffff0000Удалять мусор: Алый рубин",nil,false}, -- 36918
+  {"auto_delete_sky_sapphire","|cffff0000Удалять мусор: Небесный сапфир",nil,false}, -- 36924
+  {"auto_delete_autumns_glow","|cffff0000Удалять мусор: Сияние осени",nil,false}, -- 36921
+  {"auto_delete_twilight_opal","|cffff0000Удалять мусор: Сумеречный опал",nil,false}, -- 36927
+  {"auto_delete_forest_emerald","|cffff0000Удалять мусор: Лесной изумруд",nil,false}, -- 36933
+  {"auto_delete_runic_mana_potion","|cffff0000Удалять мусор: Рунический флакон с зельем маны",nil,false}, -- 33448
+  --{"auto_delete_test_159","|cffff0000Удалять мусор: test",nil,false},
 }
 
 -- опции\настройки\конфиг - создание фреймов
-local width, height = 800, 500
+local width, height = 800, 550
 local settingsScrollFrame = CreateFrame("ScrollFrame",ADDON_NAME.."SettingsScrollFrame",InterfaceOptionsFramePanelContainer,"UIPanelScrollFrameTemplate")
-settingsScrollFrame.name = ADDON_NAME_LOCALE_SHORT -- Название во вкладке интерфейса
+settingsScrollFrame.name = ADDON_NAME_LOCALE -- Название во вкладке интерфейса
 settingsScrollFrame:SetSize(width, height)
 settingsScrollFrame:SetVerticalScroll(10)
 settingsScrollFrame:SetHorizontalScroll(10)
@@ -762,9 +785,15 @@ settingsScrollFrame:SetScript("OnHide", function()
   settingsFrame:Hide()
 end)
 
-settingsFrame.TitleText = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-settingsFrame.TitleText:SetPoint("TOPLEFT", 24, -16)
-settingsFrame.TitleText:SetText(ADDON_NAME_LOCALE)
+do
+  local text = settingsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+  text:SetPoint("TOPLEFT", 16, -16)
+  text:SetFont(GameFontNormal:GetFont(), 20, "OUTLINE")
+  text:SetText(ADDON_NAME_LOCALE.." ("..ADDON_VERSION..")")
+  text:SetJustifyH("LEFT")
+  text:SetJustifyV("BOTTOM")
+  settingsFrame.TitleText = text
+end
 
 do
   local f = CreateFrame("button", nil, settingsFrame)
@@ -773,7 +802,7 @@ do
   
   f:SetScript("OnEnter", function(self) 
     GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
-    GameTooltip:SetText(""..ADDON_NAME_LOCALE.."\n\n"..ADDON_NOTES.."", nil, nil, nil, nil, true)
+    GameTooltip:SetText(""..ADDON_NAME_LOCALE.." ("..ADDON_VERSION..")\n\n"..ADDON_NOTES.."", nil, nil, nil, nil, true)
     GameTooltip:Show() 
   end)
 
@@ -783,43 +812,48 @@ do
 end
 
 -- функция по созданию чекбокса для конфига
-local function CreateOptionCheckbox(optionName,optionDescription,num)
+function settingsFrame:CreateCheckbox(settingName,checkboxText,tooltipText,defaultValue,optNum)
   local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
-  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -10-(num*10))
-
+  checkbox:SetPoint("TOPLEFT", settingsFrame.TitleText, "BOTTOMLEFT", 0, -10-(optNum*10))
+  checkbox:SetSize(28,28)
+  
   local textFrame = CreateFrame("Button",nil,checkbox) 
-  textFrame:SetPoint("LEFT", checkBox, "RIGHT", 0, 0)
+  textFrame:SetPoint("LEFT", checkbox, "RIGHT", 0, 0)
 
   local textRegion = textFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  --textRegion:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
-  textRegion:SetText(optionDescription or "")
+  textRegion:SetText(checkboxText)
   
   textRegion:SetJustifyH("LEFT")
   textRegion:SetJustifyV("BOTTOM")
   
   textRegion:SetAllPoints(textFrame)
   
-  textFrame:SetSize(textRegion:GetStringWidth()+50,textRegion:GetStringHeight()) 
+  textFrame:SetSize(textRegion:GetStringWidth(),textRegion:GetStringHeight()) 
   textFrame:SetPoint("LEFT", checkbox, "RIGHT", 0, 0)
 
   checkbox:SetScript("OnClick", function(self)
-    cfg[optionName]=self:GetChecked() and true or false
-    if optionName=="enable_addon" then
+    cfg[settingName]=self:GetChecked() and true or false
+    if settingName=="enable_addon" then
       f:PLAYER_ENTERING_WORLD(true)
     end
   end)
 
-  checkbox:SetScript("onshow", function(self)
-    self:SetChecked(cfg[optionName]==true and true or false)
+  checkbox:SetScript("OnShow", function(self)
+    self:SetChecked(cfg[settingName])
+  end)
+  
+  textFrame:SetScript("OnShow", function(self)
+    --self:SetSize(textRegion:GetStringWidth()+50,textRegion:GetStringHeight()) 
+    self:SetSize(textRegion:GetStringWidth()+1,textRegion:GetStringHeight())
   end)
   
   textFrame:SetScript("OnEnter", function(self) 
     GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
-    GameTooltip:SetText(optionDescription, 1, 1, 1, nil, true)
+    GameTooltip:SetText(tooltipText or checkboxText, 1, 1, 1, nil, true)
     GameTooltip:Show() 
   end)
   
-  textFrame:SetScript("OnLeave", function(self) 
+  textFrame:SetScript("OnLeave", function() 
     GameTooltip:Hide() 
   end)
   
@@ -829,36 +863,84 @@ local function CreateOptionCheckbox(optionName,optionDescription,num)
     else
       checkbox:SetChecked(true)
     end
-    cfg[optionName] = checkbox:GetChecked() and true or false
+    cfg[settingName] = checkbox:GetChecked() and true or false
   end)
-end
-
-do
-  local num=0
-  for _,v in ipairs(options) do
-    CreateOptionCheckbox(v[1],v[2],num)
-    num=num+2
-  end
-  --options=nil
 end
 
 f.settingsScrollFrame = settingsScrollFrame
 
+-- создание опций аддона
+function settingsFrame:CreateOptions()
+  if settingsFrame.options then return end
+  settingsFrame.options=true
+  settingsFrame.optNum=0
+  
+  -- вроде отныне не говнокод для интерфейса настроек (27.1.25)
+  -- [1] - settingName, [2] - checkboxText, [3] - tooltipText, [4] - значение по умолчанию, [5] - minValue, [6] - maxValue 
+  for i,v in ipairs(options) do
+    if v[4]~=nil then
+      if type(v[4])=="boolean" then
+        settingsFrame:CreateCheckbox(v[1], v[2], v[3], v[4], settingsFrame.optNum)
+        if options[i+1] and type(options[i+1][4])=="number" then
+          settingsFrame.optNum=settingsFrame.optNum+3
+        else
+          settingsFrame.optNum=settingsFrame.optNum+2
+        end
+      elseif type(v[4])=="number" then
+        --settingsFrame:createEditBox(v[1], v[2], v[3], v[4], v[5], v[6], settingsFrame.optNum)
+        if options[i+1] and type(options[i+1][4])=="boolean" then
+          settingsFrame.optNum=settingsFrame.optNum+1.5
+        else
+          settingsFrame.optNum=settingsFrame.optNum+2
+        end
+      end
+    end
+  end
+  
+  -- old --
+  -- do
+    -- local num=0
+    -- for _,v in ipairs(options) do
+      -- -- settingName,checkboxText,tooltipText,defaultValue,optNum
+      -- CreateOptionCheckbox(v[1],v[2],num)
+      -- num=num+2
+    -- end
+  -- end
+end
+
 -- инициализация конфига при загрузке адона
+function settingsFrame:InitConfig()
+  cfg = AutoOpenBgRewards_Settings or {}
+  
+  for _,v in ipairs(options) do
+    --print(cfg[v[1]],v[1])
+    if cfg[v[1]]==nil then
+      --print(type(v[2]))
+      if type(v[2])=="table" then
+        cfg[v[1]]={}
+        --print("table "..v[1].." created")
+      else
+        cfg[v[1]]=v[4]
+        _print(""..v[1]..":",tostring(cfg[v[1]]),"новая опция, задан параметр по умолчанию")
+      end
+    end
+  end
+  
+  if AutoOpenBgRewards_Settings == nil then 
+    AutoOpenBgRewards_Settings = cfg
+    cfg = AutoOpenBgRewards_Settings
+    _print("Инициализация конфига")
+  end
+  
+  settingsFrame:CreateOptions()
+  
+  _print("аддон загружен. Настройки: "..ChatLink("Настройки (кликабельно)","Settings").."")
+end
+
 settingsFrame:RegisterEvent("ADDON_LOADED")
 settingsFrame:SetScript("onevent", function(_, event, ...) 
   if arg1~=ADDON_NAME then return end
-  cfg=AutoOpenBgRewards_Settings or {}
-  if AutoOpenBgRewards_Settings == nil then 
-    AutoOpenBgRewards_Settings = {}
-    cfg=AutoOpenBgRewards_Settings
-    for _,v in ipairs(options) do
-      cfg[v[1]]=v[3]
-    end
-    options=nil
-    _print("создание дефолтного конфига")
-  end
-  _print("аддон загружен. Настройки: "..ChatLink("Настройки (кликабельно)","Settings").."")
+  settingsFrame:InitConfig()
 end)
 
 -- диалоговые окна по центру с запросом на подтверждение авто открытия/удаления 
@@ -957,7 +1039,7 @@ StaticPopupDialogs[""..ADDON_NAME.."_Confirm_Open"] = {
   end,
 }  
 
--- принудительно будем жать кнопки лута если автолут забагался и фрейм показывается больше чем 1 секунду
+-- принудительно будем жать кнопки лута если автолут забагался и фрейм показывается больше чем надо
 do
   local LootFrameAppearTime = 0
   LootFrame:HookScript("onshow",function()
@@ -977,7 +1059,7 @@ do
     if t<(0.1+select(3, GetNetStats())/1000) then return end
     t=0
     
-    if not scanLaunched or (LootFrameAppearTime+1)>GetTime() or not LootFrame:IsVisible() then 
+    if not scanLaunched or (LootFrameAppearTime+0.3)>GetTime() then 
       return 
     end
     
@@ -993,7 +1075,7 @@ do
     
     if tryCount>5 then 
       tryCount=0
-      _print("force CloseLoot()")
+      _print("force CloseLoot()","tryCount>5")
       CloseLoot() 
     end
   end)
