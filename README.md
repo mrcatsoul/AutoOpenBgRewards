@@ -9,7 +9,7 @@ Addon for auto-opening and auto-deleting trash rewards from battlegrounds on WoW
 - при выходе из кросса (бг/арена/дуэль зона) делает запрос по массовому открытию/удалению, а так же без запроса, автоматически, без подтверждения, если нажать "Да + не спрашивать", опцию с окном для данного запроса можно вернуть через опции (игровое меню>интерфейс>модификации)
 - удаляет знамя победителя/костюм мурлока если их экземпляр уже есть в сумке/банке + прочие персональные спутники/маунты если те уже изучены и другое, скриншоты опций ниже
 
-![image](https://github.com/user-attachments/assets/198e9f59-e019-4040-9069-afc1ea19b126)
+![image](https://github.com/user-attachments/assets/a33b3f84-8df5-42bd-9ad5-441af4fed81f)
 
 ![image](https://github.com/user-attachments/assets/1a8c20a0-e4bf-4cf4-9514-39209afce8ef)
 
