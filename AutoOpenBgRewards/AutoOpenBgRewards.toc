@@ -6,11 +6,15 @@
 ## Title-ruRU: |cff00bbeeАвто-опен наград с бг|r от |cFFC41F3BMori|r
 ## TitleS-ruRU: |cff3399ffАвто-опен наград с бг|r
 
-## Version: 1.0.1, 22.1.25 4:00
+## TitleAbbrv: |cff3399ffAOBR|r
 
-## Notes: Script for auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by: some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
-## Notes-ruRU: Скрипт по авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа на кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
+## Version: 1.0.3, 24.2.25 15:00
+
+## Notes: Addon for mass auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by: some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
+## Notes-ruRU: Аддон по массовому авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа на кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
 
 ## SavedVariables: AutoOpenBgRewards_Settings
 
+init.lua
+options.lua
 AutoOpenBgRewards.lua
