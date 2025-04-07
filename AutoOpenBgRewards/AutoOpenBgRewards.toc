@@ -10,8 +10,8 @@
 
 ## Version: 1.0.3, 24.2.25 15:00
 
-## Notes: Addon for mass auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by: some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
-## Notes-ruRU: Аддон по массовому авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа на кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BTombstalker|r/|cFFffffffМораль|r/|cFFC41F3BMoriarty|r~WoWCircle WotLK
+## Notes: Addon for mass auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by: some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BMori(x100)|r/|cFFC41F3BMoriarty(x5)|r~WoWCircle WotLK
+## Notes-ruRU: Аддон по массовому авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа на кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul;|r |cFFC41F3BMori(x100)|r/|cFFC41F3BMoriarty(x5)|r~WoWCircle WotLK
 
 ## SavedVariables: AutoOpenBgRewards_Settings
 
