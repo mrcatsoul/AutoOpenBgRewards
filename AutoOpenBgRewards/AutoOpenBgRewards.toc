@@ -8,7 +8,7 @@
 
 ## TitleAbbrv: |cff3399ffAOBR|r
 
-## Version: 1.0.4, 8.4.25 12:00
+## Version: 1.0.4, 8.4.25 7:00
 
 ## Notes: Addon for mass auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul, |cFFC41F3BMori(x100)|r/|cFFC41F3BMoriarty(x5)|r~WoWCircle WotLK
 ## Notes-ruRU: Аддон по массовому авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа над кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul; |cFFC41F3BMori(x100)|r/|cFFC41F3BMoriarty(x5)|r~WoWCircle WotLK
