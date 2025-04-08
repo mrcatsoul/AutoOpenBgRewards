@@ -33,6 +33,7 @@ local AUCTION_ITEM_SUB_CATEGORY_PET = LOCALE=="ruRU" and "Питомцы" or "Pe
 local AUCTION_ITEM_SUB_CATEGORY_MOUNT = LOCALE=="ruRU" and "Верховые животные" or "Mount"
 local BUG_CATEGORY13,ITEM_SOULBOUND,ITEM_SPELL_KNOWN = BUG_CATEGORY13,ITEM_SOULBOUND,ITEM_SPELL_KNOWN
 local ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION = LOCALE=="ruRU" and "Использование: Учит призывать этого спутника." or "Use: Teaches you how to summon this companion."
+local ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION2 = LOCALE=="ruRU" and "Использование: Учит призывать и отпускать этого спутника." or "Use: Teaches you how to summon and dismiss this companion."
 local ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT = LOCALE=="ruRU" and "Использование: Обучает управлению этим верховым животным. Это очень быстрое верховое животное." or "Use: Teaches you how to summon this mount.  This is a very fast mount."
 local ITEM_TOOLTIP_TEXT_MOUNT = LOCALE=="ruRU" and "Верховые животные" or "Mount"
 
@@ -294,7 +295,7 @@ local function GetItemTooltipInfo(bag,slot)
     elseif (text == ITEM_SPELL_KNOWN) then
       isAlreadyKnown=true
       _print("изученная шмотка детектед:",bag,slot,link,id)
-    elseif (text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION) then
+    elseif (text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION or ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION2) then
       isCompanion=true
       _print("пет детектед:",bag,slot,link,id)
     elseif (text == ITEM_TOOLTIP_TEXT_MOUNT or text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT) then
@@ -403,7 +404,7 @@ function f:ScanBags(reason, ForceDelTrash, ForceOpen)
     t=t+elapsed
     
     --_print(t)
-    if t<(0.03+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт. анти-тротл система
+    if t<(0.1+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт. анти-тротл система
       return 
     end
     --if t<0.01 or LootFrame:IsVisible() then return end
@@ -1059,7 +1060,7 @@ do
     if t<(0.1+select(3, GetNetStats())/1000) then return end
     t=0
     
-    if not scanLaunched or (LootFrameAppearTime+0.3)>GetTime() then 
+    if not scanLaunched or (LootFrameAppearTime+0.1)>GetTime() then 
       return 
     end
     
