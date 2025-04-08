@@ -118,9 +118,26 @@ local function ChatLink(text,arg1,colorHex)
   return "|cff"..colorHex.."|Haddon:"..ADDON_NAME.."_link:"..arg1..":|h["..text.."|r|cff"..colorHex.."]|h|r"
 end
 
-local function _print(msg,msg2,msg3)
+-- local function _print(msg,msg2,msg3)
+  -- if cfg["show_addon_log_in_chat"] then
+    -- print(""..ChatLink(ADDON_NAME_ABBREV,"Settings","3399ff")..": "..msg, msg2 and "("..msg2..")" or "", msg3 and "("..msg3..")" or "")
+  -- end
+-- end
+
+local function _print(...)
   if cfg["show_addon_log_in_chat"] then
-    print(""..ChatLink(ADDON_NAME_ABBREV,"Settings","3399ff")..": "..msg, msg2 and "("..msg2..")" or "", msg3 and "("..msg3..")" or "")
+    local args = { ... }
+    local header = ChatLink(ADDON_NAME_ABBREV, "Settings", "3399ff")
+    
+    -- Преобразуем первый аргумент в строку; его выводим без скобок
+    local output = header .. ": " .. (args[1] or "")
+    
+    -- Для всех последующих аргументов оборачиваем их в круглые скобки
+    for i = 2, #args do
+      output = output .. " (" .. tostring(args[i]) .. ")"
+    end
+
+    print(output)
   end
 end
 
@@ -334,7 +351,7 @@ local function GetItemTooltipInfo(bag,slot)
     elseif (text == ITEM_SPELL_KNOWN) then
       isAlreadyKnown=true
       _print("изученная шмотка детектед:",bag,slot,link,id)
-    elseif (text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION or ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION2) then
+    elseif (text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION or text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_COMPANION2) then
       isCompanion=true
       _print("пет детектед:",bag,slot,link,id)
     elseif (text == ITEM_TOOLTIP_TEXT_MOUNT or text == ITEM_TOOLTIP_SPELL_TEXT_LEARN_MOUNT) then
