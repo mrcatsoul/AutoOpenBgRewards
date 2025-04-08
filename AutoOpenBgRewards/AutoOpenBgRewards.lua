@@ -1,5 +1,3 @@
--- 24.2.25
-
 local ADDON_NAME, core = ...
 
 local LOCALE = GetLocale()
@@ -20,6 +18,7 @@ f:RegisterEvent("UI_ERROR_MESSAGE")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 f:RegisterEvent("PLAYER_LEAVING_WORLD")
+f:RegisterEvent("MERCHANT_CLOSED")
 --f:RegisterEvent("PLAYER_LOGIN")
 f:SetScript("OnEvent", function(self, event, ...) self[event](self, ...) end)
 local _,scanLaunched,bagsAreFull,InstanceType,curZone
@@ -43,6 +42,13 @@ local GetContainerItemLink = GetContainerItemLink
 local GetNetStats, GetTime = GetNetStats, GetTime
 local UnitExists, UnitIsDead, UnitIsConnected = UnitExists, UnitIsDead, UnitIsConnected
 local SetCVar, GetCVar = SetCVar, GetCVar
+local select = select
+local print = print
+local format = string.format
+local floor = math.floor
+local tinsert = table.insert 
+local tremove = table.remove
+local _G = _G
 
 -- стремные функции, которые будут использоваться в коде. надеюсь все проверки правильно сделаю... 
 local ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem=ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem
@@ -58,6 +64,34 @@ local containerIDs =
   --44951, -- ящик бомб (на тест)
 }
 
+local DelayedCall
+do
+  local DelayedCallFrame = CreateFrame("Frame")  -- Создаем один фрейм для всех отложенных вызовов
+  DelayedCallFrame:Hide()  -- Изначально скрываем фрейм
+  
+  local calls = {}  -- Таблица для хранения отложенных вызовов
+  
+  local function OnUpdate(self, elapsed)
+    for i, call in ipairs(calls) do
+      call.time = call.time + elapsed
+      if call.time >= call.delay then
+        call.func()
+        tremove(calls, i)  -- Удаляем вызов из списка
+      end
+    end
+  end
+  
+  DelayedCallFrame:SetScript("OnUpdate", OnUpdate)
+  
+  -- Основная функция для отложенных вызовов
+  function DelayedCall(delay, func)
+    tinsert(calls, { delay = delay, time = 0, func = func })
+    if not DelayedCallFrame:IsShown() then
+      DelayedCallFrame:Show()  -- Показываем фрейм, если еще не показан
+    end
+  end
+end
+
 local function contains(table, element)
   for _, value in pairs(table) do
     if (value == element) then
@@ -68,7 +102,7 @@ local function contains(table, element)
 end
 
 local function rgbToHex(r, g, b)
-  return string.format("%02x%02x%02x", math.floor(255 * r), math.floor(255 * g), math.floor(255 * b))
+  return format("%02x%02x%02x", floor(255 * r), floor(255 * g), floor(255 * b))
 end
 
 local function tablelength(T)
@@ -160,19 +194,24 @@ function f:PLAYER_ENTERING_WORLD(byCheckbox)
   
   if byCheckbox then _print("f:PLAYER_ENTERING_WORLD(byCheckbox)") end
   
-  local t = not byCheckbox and GetTime()+1 or 0
-  
-  CreateFrame("frame"):SetScript("OnUpdate", function(self)
-    if t<GetTime() then
-      if not f:IsEventRegistered("BAG_UPDATE") then
-        f:RegisterEvent("BAG_UPDATE")
-        _print("RegisterEvent BAG_UPDATE")
-      end
-      f:ScanBags("PLAYER_ENTERING_WORLD", not cfg["auto_del_trash_confirm"], cfg["auto_open_when_received"] and not cfg["auto_open_confirm"]) -- скан при входе в игру
-      self:SetScript("OnUpdate", nil)
-      self=nil
+  local t = not byCheckbox and 1 or 0
+
+  DelayedCall(t, function()
+    if not f:IsEventRegistered("BAG_UPDATE") then
+      f:RegisterEvent("BAG_UPDATE")
+      _print("RegisterEvent BAG_UPDATE")
     end
+    f:ScanBags("PLAYER_ENTERING_WORLD", nil, cfg["auto_open_when_received"] and not cfg["auto_open_confirm"]) -- скан при входе в игру
+    --f:ScanBags("PLAYER_ENTERING_WORLD", not cfg["auto_del_trash_confirm"]) -- скан при входе в игру
+    --f:ScanBags(reason, ForceDelTrash, ForceOpen)
+    --f:ScanBags(""..ADDON_NAME.."_Confirm_Delete",true)
+    --f:ScanBags(""..ADDON_NAME.."_Confirm_Open",nil,true)
   end)
+end
+
+function f:MERCHANT_CLOSED()
+  f:ScanBags("MERCHANT_CLOSED", nil, cfg["auto_open_when_received"] and not cfg["auto_open_confirm"]) 
+  --f:ScanBags("PLAYER_ENTERING_WORLD", not cfg["auto_del_trash_confirm"]) 
 end
 
 function f:ZONE_CHANGED_NEW_AREA()
@@ -402,7 +441,7 @@ function f:ScanBags(reason, ForceDelTrash, ForceOpen)
     end
     
     t=t+elapsed
-    
+
     --_print(t)
     if t<(0.1+select(3, GetNetStats())/1000) or LootFrame:IsVisible() then -- ожидание если фрейм лута открыт. анти-тротл система
       return 
@@ -475,6 +514,7 @@ function f:ScanBags(reason, ForceDelTrash, ForceOpen)
                      (cfg["auto_delete_all_commons_pets"] and isCompanion and quality==1) or -- белые спутники
                      (cfg["auto_delete_all_rare_epic_pets"] and isCompanion and (quality==3 --[[or quality==4]])) -- синие спутники
                      --or ((itemID==159 or itemID==1179 or itemID==1205 or itemID==1645 or itemID==1708 or itemID==2512 or itemID==12644 or itemID==41119) and cfg["auto_delete_test_159"]) -- test
+                     --or (itemID==41119) -- test saronite bomb
                   then 
                     if not trashItemsCount[itemID] then
                       local countToDel=countInBags
@@ -704,6 +744,10 @@ function f:ScanBags(reason, ForceDelTrash, ForceOpen)
     -- elseif ForceOpen then
       -- f:ScanBags("PLAYER_ENTERING_WORLD", cfg["auto_del_trash_confirm"]==false, cfg["auto_open_confirm"]==false)
     -- end
+    
+    if ForceOpen then
+      f:ScanBags("check trash after ForceOpen", not cfg["auto_del_trash_confirm"]) 
+    end
     
     return
   end)
