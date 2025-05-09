@@ -532,6 +532,7 @@ function f:ScanBags(reason, ForceDelTrash, ForceOpen)
                      (cfg["auto_delete_all_rare_epic_pets"] and isCompanion and (quality==3 --[[or quality==4]])) -- синие спутники
                      --or ((itemID==159 or itemID==1179 or itemID==1205 or itemID==1645 or itemID==1708 or itemID==2512 or itemID==12644 or itemID==41119) and cfg["auto_delete_test_159"]) -- test
                      --or (itemID==41119) -- test saronite bomb
+                     --/dump GetItemCount(38578)
                   then 
                     if not trashItemsCount[itemID] then
                       local countToDel=countInBags
