@@ -9,7 +9,7 @@ local ADDON_NAME_ABBREV = GetAddOnMetadata(ADDON_NAME,"TitleAbbrv")
 local ADDON_VERSION = GetAddOnMetadata(ADDON_NAME,"Version")
 
 local MIN_FREE_SLOTS_FOR_AUTO_OPEN = 5
-local MAX_MONEY_FOR_AUTO_OPEN = 210 * 10000000 -- первое число(210) = голда в касарях, лимит выше которого не будем опенить автоматом
+local MAX_MONEY_FOR_AUTO_OPEN = 210 * 10000000 -- первое число(210) = голда в касарях, лимит выше которого НЕ будем опенить автоматом
 
 local f=CreateFrame("frame")
 f.Tip = CreateFrame("GameTooltip",ADDON_NAME.."_ItemCheckTooltip",nil,"GameTooltipTemplate")
@@ -22,7 +22,7 @@ f:RegisterEvent("MERCHANT_CLOSED")
 --f:RegisterEvent("PLAYER_LOGIN")
 f:SetScript("OnEvent", function(self, event, ...) self[event](self, ...) end)
 local _,scanLaunched,bagsAreFull,InstanceType,curZone
-local lockedBagSlot,openTryCount,cfg,trashItemsCount,containerItemsCount={},{},{},{},{}
+local lockedBagSlot,openTryCount,cfg,gcfg,trashItemsCount,containerItemsCount={},{},{},{},{},{}
 local lastBagUpdTime=0
 local oldAutoLootState=GetCVar("autoLootDefault")
 
@@ -40,8 +40,10 @@ local GetContainerNumFreeSlots,GetItemInfo,GetItemCount = GetContainerNumFreeSlo
 local GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID = GetContainerItemInfo,GetContainerNumSlots,GetContainerItemID
 local GetContainerItemLink = GetContainerItemLink
 local GetNetStats, GetTime = GetNetStats, GetTime
-local UnitExists, UnitIsDead, UnitIsConnected = UnitExists, UnitIsDead, UnitIsConnected
+local UnitExists, UnitIsDead, UnitIsConnected, UnitIsPVPSanctuary = UnitExists, UnitIsDead, UnitIsConnected, UnitIsPVPSanctuary
 local SetCVar, GetCVar = SetCVar, GetCVar
+local GetRealZoneText = GetRealZoneText
+local UnitName, GetRealmName = UnitName, GetRealmName
 local select = select
 local print = print
 local format = string.format
@@ -61,14 +63,13 @@ local containerIDs =
   10594, -- сундук наград с поля боя
   44816, -- скари лутбокс
   8507,  -- Festive
-  --44951, -- ящик бомб (на тест)
+  44951, -- ящик бомб (на тест)
 }
 
+-- функция отложенного вызова другой функции
 local DelayedCall
 do
-  local DelayedCallFrame = CreateFrame("Frame")  -- Создаем один фрейм для всех отложенных вызовов
-  DelayedCallFrame:Hide()  -- Изначально скрываем фрейм
-  
+  local f = CreateFrame("Frame")  -- Создаем один фрейм для всех отложенных вызовов
   local calls = {}  -- Таблица для хранения отложенных вызовов
   
   local function OnUpdate(self, elapsed)
@@ -81,14 +82,11 @@ do
     end
   end
   
-  DelayedCallFrame:SetScript("OnUpdate", OnUpdate)
+  f:SetScript("OnUpdate", OnUpdate)
   
   -- Основная функция для отложенных вызовов
-  function DelayedCall(delay, func)
+  DelayedCall = function(delay, func)
     tinsert(calls, { delay = delay, time = 0, func = func })
-    if not DelayedCallFrame:IsShown() then
-      DelayedCallFrame:Show()  -- Показываем фрейм, если еще не показан
-    end
   end
 end
 
@@ -101,9 +99,9 @@ local function contains(table, element)
   return false
 end
 
-local function rgbToHex(r, g, b)
-  return format("%02x%02x%02x", floor(255 * r), floor(255 * g), floor(255 * b))
-end
+-- local function rgbToHex(r, g, b)
+  -- return format("%02x%02x%02x", floor(255 * r), floor(255 * g), floor(255 * b))
+-- end
 
 local function tablelength(T)
   local count = 0
@@ -125,7 +123,8 @@ end
 -- end
 
 local function _print(...)
-  if cfg["show_addon_log_in_chat"] then
+  local arg2 = select(2,...)
+  if cfg["show_addon_log_in_chat"] or gcfg == nil or (arg2 and type(arg2)=="boolean" and arg2==true) then
     local args = { ... }
     local header = ChatLink(ADDON_NAME_ABBREV, "Settings", "3399ff")
     
@@ -177,7 +176,7 @@ end
   -- f:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- end
 
-function f:BAG_UPDATE(...)
+function f:BAG_UPDATE()
   if not cfg["enable_addon"] then return end
   --print("BAG_UPDATE")
   if lastBagUpdTime>=(GetTime()-0.1) then return end
@@ -203,7 +202,7 @@ end
 
 function f:PLAYER_ENTERING_WORLD(byCheckbox)
   InstanceType = select(2,IsInInstance())
-  curZone=GetZoneText()
+  curZone=GetRealZoneText()
   lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
   oldAutoLootState=GetCVar("autoLootDefault")
   
@@ -233,7 +232,7 @@ end
 
 function f:ZONE_CHANGED_NEW_AREA()
   InstanceType = select(2,IsInInstance())
-  curZone=GetZoneText()
+  curZone=GetRealZoneText()
   lockedBagSlot,bagsAreFull,openTryCount={},nil,{}
 end
 
@@ -245,7 +244,7 @@ function f:UI_ERROR_MESSAGE(msg)
 end
 
 local function inCrossZone()
-  if InstanceType=="pvp" or InstanceType=="arena" or curZone==ZONE_ULDUAR or curZone==ZONE_AZSHARA_CRATER then
+  if InstanceType=="pvp" or InstanceType=="arena" or curZone==ZONE_ULDUAR or curZone==ZONE_AZSHARA_CRATER or (InstanceType=="raid" and UnitIsPVPSanctuary("player")) then
     return true
   end
   return false
@@ -364,8 +363,9 @@ local function GetItemTooltipInfo(bag,slot)
 end
 
 local function CannotScan()
-  if 
-    scanLaunched
+  if
+    not cfg["enable_addon"]
+    or scanLaunched
     or not UnitIsConnected("player")
     --or bagsAreFull  
     or curZone==nil
@@ -392,7 +392,8 @@ end
 local function CanOpen()
   if
   (
-    UnitExists("npc") 
+    not cfg["enable_addon"]
+    or UnitExists("npc") 
     or UnitIsDead("player") 
     or MerchantFrame:IsVisible() 
     or SendMailFrame:IsVisible()
@@ -402,8 +403,8 @@ local function CanOpen()
     or (AuctionFrame and AuctionFrame:IsVisible())
     or (GuildBankFrame and GuildBankFrame:IsVisible())
     or inCrossZone()
-    or InstanceType=="pvp" 
-    or InstanceType=="arena" 
+    --or InstanceType=="pvp" 
+    --or InstanceType=="arena" 
     or bagsAreFull
     or (cfg["stop_if_less_then_X_free_bag_slots"] and getNumFreeBagSlots() < MIN_FREE_SLOTS_FOR_AUTO_OPEN)
     or (cfg["stop_if_more_then_X_money"] and GetMoney() > MAX_MONEY_FOR_AUTO_OPEN)
@@ -415,7 +416,7 @@ local function CanOpen()
 end
 
 local function CanDelete()
-  if GetCursorInfo()~=nil then
+  if not cfg["enable_addon"] or GetCursorInfo()~=nil then
     return false
   end
   for k,v in pairs(cfg) do
@@ -874,6 +875,13 @@ do
   end)
 end
 
+-- локальные параметры (более не лезем нонстопом в глобальную область) 27.6.25
+function settingsFrame:UpdateLocalConfig()
+  for k,v in pairs(gcfg) do
+    cfg[k] = v
+  end
+end
+
 -- функция по созданию чекбокса для конфига
 function settingsFrame:CreateCheckbox(settingName,checkboxText,tooltipText,defaultValue,optNum)
   local checkbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
@@ -895,14 +903,15 @@ function settingsFrame:CreateCheckbox(settingName,checkboxText,tooltipText,defau
   textFrame:SetPoint("LEFT", checkbox, "RIGHT", 0, 0)
 
   checkbox:SetScript("OnClick", function(self)
-    cfg[settingName]=self:GetChecked() and true or false
+    gcfg[settingName]=self:GetChecked() and true or false
+    settingsFrame:UpdateLocalConfig()
     if settingName=="enable_addon" then
       f:PLAYER_ENTERING_WORLD(true)
     end
   end)
 
   checkbox:SetScript("OnShow", function(self)
-    self:SetChecked(cfg[settingName])
+    self:SetChecked(gcfg[settingName])
   end)
   
   textFrame:SetScript("OnShow", function(self)
@@ -926,7 +935,8 @@ function settingsFrame:CreateCheckbox(settingName,checkboxText,tooltipText,defau
     else
       checkbox:SetChecked(true)
     end
-    cfg[settingName] = checkbox:GetChecked() and true or false
+    gcfg[settingName] = checkbox:GetChecked() and true or false
+    settingsFrame:UpdateLocalConfig()
   end)
 end
 
@@ -971,29 +981,51 @@ function settingsFrame:CreateOptions()
   -- end
 end
 
+function settingsFrame:GetCharacterProfileKeyName()
+  return UnitName("player").." ~ "..GetRealmName():gsub("%b[]", ""):gsub("%s+$", "")
+end
+
 -- инициализация конфига при загрузке адона
 function settingsFrame:InitConfig()
-  cfg = AutoOpenBgRewards_Settings or {}
+  gcfg = AutoOpenBgRewards_Settings
   
-  for _,v in ipairs(options) do
-    --print(cfg[v[1]],v[1])
-    if cfg[v[1]]==nil then
-      --print(type(v[2]))
-      if type(v[2])=="table" then
-        cfg[v[1]]={}
-        --print("table "..v[1].." created")
-      else
-        cfg[v[1]]=v[4]
-        _print(""..v[1]..":",tostring(cfg[v[1]]),"новая опция, задан параметр по умолчанию")
+  if not gcfg then
+    _print("Инициализация конфига для аккаунта",true)
+    gcfg = {}
+    AutoOpenBgRewards_Settings = gcfg
+  end
+  
+  local characterProfileKeyName = settingsFrame:GetCharacterProfileKeyName()
+
+  if gcfg[characterProfileKeyName] == nil then
+    _print("Инициализация конфига для персонажа",true)
+    gcfg[characterProfileKeyName] = {}
+    for k,v in pairs(gcfg) do
+      if type(v)=="boolean" then
+        gcfg[characterProfileKeyName][k] = v
+        gcfg[k] = nil
+        print("delete obsolete boolean")
       end
     end
   end
   
-  if AutoOpenBgRewards_Settings == nil then 
-    AutoOpenBgRewards_Settings = cfg
-    cfg = AutoOpenBgRewards_Settings
-    _print("Инициализация конфига")
+  gcfg = gcfg[characterProfileKeyName]
+  
+  for _,v in ipairs(options) do
+    --print(gcfg[v[1]],v[1])
+    if gcfg[v[1]]==nil then
+      --print(type(v[2]))
+      if type(v[2])=="table" then
+        gcfg[v[1]]={}
+        --print("table "..v[1].." created")
+      else
+        gcfg[v[1]]=v[4]
+        _print(""..v[1]..":",tostring(gcfg[v[1]]),"новая опция, задан параметр по умолчанию",true)
+      end
+    end
   end
+
+  settingsFrame:UpdateLocalConfig()
   
   settingsFrame:CreateOptions()
   
