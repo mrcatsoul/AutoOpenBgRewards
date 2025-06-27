@@ -1,17 +1,19 @@
 ## Interface: 30300
 
-## Title: |cff00bbeeAutoOpenBgRewards|r by |cFFC41F3BMori|r
+## Title: _|cff00bbeeAutoOpenBgRewards|r by |cFFC41F3BMori|r
 ## TitleShort: |cff3399ffAutoOpenBgRewards|r
 
-## Title-ruRU: |cff00bbeeАвто-опен наград с бг|r от |cFFC41F3BMori|r
+## Title-ruRU: _|cff00bbeeАвто-опен наград с бг|r от |cFFC41F3BMori|r
 ## TitleS-ruRU: |cff3399ffАвто-опен наград с бг|r
 
 ## TitleAbbrv: |cff3399ffAOBR|r
 
-## Version: 1.0.4, 8.4.25 17:00
+## Version: 1.0.5, 27.6.25 16:00
 
-## Notes: Addon for mass auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul, |cFFC41F3BMori(x100)|r/|cFFC41F3BMoriarty(x5)|r~WoWCircle WotLK
-## Notes-ruRU: Аддон по массовому авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа над кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul; |cFFC41F3BMori(x100)|r/|cFFC41F3BMoriarty(x5)|r~WoWCircle WotLK
+## Notes: Addon for mass auto-opening and auto-deleting trash rewards from battlegrounds on WoWCircle server. Codework by some random guy. GitHub/YouTube/Discord/Telegram: @mrcatsoul. |cFFC41F3BMori|r~WoWCircle WotLK x100
+## Notes-ruRU: Аддон по массовому авто-открытию и авто-удалению мусорных наград с бг на сервере WoWCircle. Работа над кодом: Рандом из лфг. GitHub/YouTube/Discord/Telegram: @mrcatsoul. |cFFC41F3BMori|r~WoWCircle WotLK x100
+
+## Author: GitHub/YouTube/Discord/Telegram: @mrcatsoul. Mori~WoWCircle WotLK x100
 
 ## SavedVariables: AutoOpenBgRewards_Settings
 
