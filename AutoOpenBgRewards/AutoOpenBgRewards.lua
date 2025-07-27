@@ -51,6 +51,7 @@ local floor = math.floor
 local tinsert = table.insert 
 local tremove = table.remove
 local _G = _G
+local InCombatLockdown = InCombatLockdown
 
 -- стремные функции, которые будут использоваться в коде. надеюсь все проверки правильно сделаю... 
 local ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem=ClearCursor,PickupContainerItem,DeleteCursorItem,UseContainerItem
@@ -366,6 +367,7 @@ local function CannotScan()
   if
     not cfg["enable_addon"]
     or scanLaunched
+    or InCombatLockdown()
     or not UnitIsConnected("player")
     --or bagsAreFull  
     or curZone==nil
@@ -525,6 +527,7 @@ function f:ScanBags(reason, ForceDelTrash, ForceOpen)
                      (itemID==36927 and cfg["auto_delete_twilight_opal"]) or
                      (itemID==36933 and cfg["auto_delete_forest_emerald"]) or
                      (itemID==33448 and cfg["auto_delete_runic_mana_potion"]) or
+                     (itemID==46379 and cfg["auto_delete_flask_of_stoneblood"]) or
                      (itemID==33079 and cfg["auto_delete_murloc_costume_if_has"] and countFull > 1) or 
                      (itemID==38578 and cfg["auto_delete_flag_of_ownership_if_has"] and countFull > 1) or
                      (cfg["auto_delete_soulbound_already_known_mounts_pets"] and (isCompanion or isMount) and isSoulbound and isAlreadyKnown) or
@@ -817,6 +820,7 @@ local options =
   {"auto_delete_twilight_opal","|cffff0000Удалять мусор: Сумеречный опал",nil,false}, -- 36927
   {"auto_delete_forest_emerald","|cffff0000Удалять мусор: Лесной изумруд",nil,false}, -- 36933
   {"auto_delete_runic_mana_potion","|cffff0000Удалять мусор: Рунический флакон с зельем маны",nil,false}, -- 33448
+  {"auto_delete_flask_of_stoneblood","|cffff0000Удалять мусор: Настой каменной крови",nil,false}, -- 46379
   --{"auto_delete_test_159","|cffff0000Удалять мусор: test",nil,false},
 }
 
